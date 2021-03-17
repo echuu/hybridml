@@ -1,0 +1,26 @@
+{
+    "id": "7685E9BF",
+    "path": "~/hybridml/R/partition.R",
+    "project_path": "R/partition.R",
+    "type": "r_source",
+    "hash": "2377015586",
+    "contents": "",
+    "dirty": false,
+    "created": 1616017686500.0,
+    "source_on_save": false,
+    "relative_order": 3,
+    "properties": {
+        "source_window_id": "",
+        "Source": "Source",
+        "cursorPosition": "690,5",
+        "scrollLine": "668"
+    },
+    "folds": "",
+    "lastKnownWriteTime": 1616018531,
+    "encoding": "UTF-8",
+    "collab_server": "",
+    "source_window": "",
+    "last_content_update": 1616018531803,
+    "read_only": false,
+    "read_only_alternatives": []
+}
