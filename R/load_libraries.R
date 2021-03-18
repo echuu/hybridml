@@ -1,12 +1,17 @@
 
+
+library('dplyr')                 # data mangaement
+options(scipen = 999)
+options(dplyr.summarise.inform = FALSE)
+
+
+
 # load_libraries.R
 # load the packages required to run the algorithm
-
 # library('MASS')                  # misc functions
 # library('ggplot2')               # visualization
 # library('rpart')                 # rpart()
 # library('stringr')               # regex functions
-library('dplyr')                 # data mangaement
 # library('VGAM')                  # for log1mexp() function
 # library('matrixcalc')            # trace(), is.positive.definite()
 # library('MCMCpack')              # riwish()
@@ -22,13 +27,8 @@ library('dplyr')                 # data mangaement
 # library('MLmetrics')
 
 
-options(scipen = 999)
-options(dplyr.summarise.inform = FALSE)
-
 ## change value of INSTALL_ALL to TRUE if you are missing the above libraries
-
 INSTALL_ALL = FALSE
-
 if (INSTALL_ALL) {
     install.packages("dplyr")
     install.packages('mvtnorm')

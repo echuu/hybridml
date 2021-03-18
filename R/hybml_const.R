@@ -21,19 +21,18 @@ hybml_const_call = function(u_df) {
 
     # const_vec  = numeric(N_approx) # store constant approximation
     D = ncol(u_df) - 1
-    J = nrow(u_df)
 
     ## (2) fit the regression tree via rpart()
     u_rpart = rpart::rpart(psi_u ~ ., u_df)
 
     ## (3) process the fitted tree
-
     # (3.1) obtain the (data-defined) support for each of the parameters
     param_support = extractSupport(u_df, D) #
 
     # (3.2) obtain the partition
     u_partition = extractPartition(u_rpart, param_support)
-
+    bounds_out = u_partition %>% dplyr::arrange(leaf_id) %>%
+        dplyr::select(-c("psi_hat", "leaf_id"))
 
     # param_out = u_star_cand(u_rpart, u_df, u_partition, D) # partition.R
     param_out = u_star(u_rpart, u_df, u_partition, D) # partition.R
@@ -41,8 +40,6 @@ hybml_const_call = function(u_df) {
 
     # ----------------------------------------------------------------------
     n_partitions = nrow(u_partition) # number of partitions
-
-    # ----------------------------------------------------------------------
 
     psi_partition = param_out %>%
         dplyr::select(-c('leaf_id', 'psi_choice', 'logQ_cstar', 'n_obs'))
@@ -52,15 +49,10 @@ hybml_const_call = function(u_df) {
     log_vol_vec = (bounds[seq(2, 2 * D, 2)] - bounds[seq(1, 2 * D, 2)]) %>%
         log() %>% rowSums()
 
-    zhat = (-psi_partition$psi_star + log_vol_vec) %>% log_sum_exp
+    logzhat = (-psi_partition$psi_star + log_vol_vec) %>% log_sum_exp
 
-
-    return(list(n_partitions  = n_partitions,
-                param_out     = param_out,
-                u_rpart       = u_rpart,
-                param_support = param_support,
-                zhat          = zhat))
-
+    return(list(logz   = logzhat,
+                bounds = bounds_out))
 }
 # end of hybml_const_call() function -------------------------------------------
 
@@ -77,7 +69,7 @@ hybml_const_call = function(u_df) {
 hybml_const <- function(u_df) {
     out <- tryCatch(
         {
-            hybrid_ml_call(u_df)
+            hybml_const_call(u_df)
             # The return value of `readLines()` is the actual value
             # that will be returned in case there is no condition
             # (e.g. warning or error).

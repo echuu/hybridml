@@ -3,41 +3,14 @@
 
 ### final form of the hybrid approximation function
 
+
+
+
+
 ### the following functions need to be passed into the function
 ### (1) psi     :  negative log posterior
 ### (2) grad    :  gradient of the negative log posterior
 ### (3) hess    :  hessian of the negative log posterior
-
-
-
-preprocess = function(post_samps, D, params = NULL) {
-
-    psi_u = apply(post_samps, 1, psi, params = params) %>% unname() # (J x 1)
-
-    # (1.2) name columns so that values can be extracted by partition.R
-    u_df_names = character(D + 1)
-    for (d in 1:D) {
-        u_df_names[d] = paste("u", d, sep = '')
-    }
-    u_df_names[D + 1] = "psi_u"
-
-    # populate u_df
-    u_df = cbind(post_samps, psi_u) # J x (D + 1)
-    names(u_df) = u_df_names
-
-    return(u_df)
-} # end of preprocess() function -----------------------------------------------
-
-
-l1_norm = function(u, u_0) {
-    sum(abs(u - u_0))
-}
-
-l2_norm = function(u, u_0) {
-    sum((u - u_0)^2)
-}
-
-
 
 hybml = function(u_df, params, psi, grad, hess, u_0 = NULL, D = ncol(u_df) - 1) {
 
@@ -106,7 +79,9 @@ hybml = function(u_df, params, psi, grad, hess, u_0 = NULL, D = ncol(u_df) - 1) 
             0.5 * t(m_k) %*% H_k %*% m_k + G_k[k]
     }
 
-    log_sum_exp(log_terms)
+    return(list(logz = log_sum_exp(log_terms),
+                bounds = bounds,
+                G_k = G_k))
 
 }
 
@@ -122,15 +97,10 @@ globalMode = function(u_df, tolerance = 0.00001, maxsteps = 200) {
     step.size = 1
 
 
-    while(tolcriterion>tolerance && numsteps < maxsteps){
+    while(tolcriterion > tolerance && numsteps < maxsteps){
 
-        # G = evidence.obj$hessian(theta)
         G = -hess(theta, params)
-
         invG = solve(G)
-        # thetaNew = theta -
-        #     step.size * invG %*% evidence.obj$log.posterior.gradient(theta)
-
         thetaNew = theta + step.size * invG %*% grad(theta, params)
 
         # if precision turns negative or if the posterior probability of
@@ -149,11 +119,8 @@ globalMode = function(u_df, tolerance = 0.00001, maxsteps = 200) {
     if(numsteps == maxsteps)
         warning('Maximum number of steps reached in Newton method.')
 
-
     print(paste("converged -- ", numsteps, " iters", sep = ''))
     return(theta)
-
-
 }
 
 
@@ -162,12 +129,6 @@ ep_step = function(lb, ub, m_k, H_k_inv) {
     out <- tryCatch(
         {
             epmgp::pmvn(lb, ub, m_k, H_k_inv, log = TRUE)
-            # The return value of `readLines()` is the actual value
-            # that will be returned in case there is no condition
-            # (e.g. warning or error).
-            # You don't need to state the return value via `return()` as code
-            # in the "try" part is not wrapped insided a function (unlike that
-            # for the condition handlers for warnings and error below)
         },
         error=function(cond) {
             message("integral evaluation is 0")

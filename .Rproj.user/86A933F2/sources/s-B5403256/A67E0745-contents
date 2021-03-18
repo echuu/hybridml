@@ -1,7 +1,7 @@
 
 
 source("examples/hiw_helper.R")
-
+#
 testG  = matrix(c(1,1,0,0,0,
                   1,1,1,1,1,
                   0,1,1,1,1,
