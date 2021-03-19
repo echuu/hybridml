@@ -5,8 +5,6 @@
 
 
 
-
-
 ### the following functions need to be passed into the function
 ### (1) psi     :  negative log posterior
 ### (2) grad    :  gradient of the negative log posterior
@@ -35,6 +33,7 @@ hybml = function(u_df, params, psi, grad, hess, u_0 = NULL, D = ncol(u_df) - 1) 
     if (is.null(u_0)) {
         MAP_LOC = which(u_df$psi_u == min(u_df$psi_u))
         u_0 = u_df[MAP_LOC,1:D] %>% unname() %>% unlist()
+        # print(u_0)
     }
 
     ### (2) find point in each partition closest to global mean (for now)
@@ -63,7 +62,7 @@ hybml = function(u_df, params, psi, grad, hess, u_0 = NULL, D = ncol(u_df) - 1) 
         u_k = unname(unlist(psi_df[k,1:D]))
 
         H_k = hess(u_k, params = params)
-        H_k_inv = chol2inv(chol(H_k))
+        H_k_inv = suppressWarnings(chol2inv(chol(H_k)))
 
         # lambda_k = pracma::grad(psi, u_k, params = params) # numerical
         lambda_k = grad(u_k, params)

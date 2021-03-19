@@ -94,6 +94,51 @@ radiata_model = function(y, X, mu0, Lambda0, a_0, b_0) {
     return(as.data.frame(T))
   }
 
+
+  radiata_model_obj$theta_star = function(tolerance = 0.0001, maxsteps = 200) {
+
+    betaHat = solve(t(X)%*%X, method = "chol") %*% (t(X) %*% y)
+    z = y - X %*% betaHat
+    tauHat = n / (t(z) %*% z)
+    theta = c(betaHat, tauHat)
+    numsteps = 0
+    tolcriterion = 100
+    step.size = 1
+
+    while(tolcriterion>tolerance && numsteps < maxsteps){
+
+      # G = evidence.obj$hessian(theta)
+      G = -hess(theta, params)
+
+      invG = solve(G)
+      # thetaNew = theta -
+      #     step.size * invG %*% evidence.obj$log.posterior.gradient(theta)
+
+      thetaNew = theta + step.size * invG %*% grad(theta, params)
+
+      # if precision turns negative or if the posterior probability of
+      # thetaNew becomes smaller than the posterior probability of theta
+      if(thetaNew[d+1] < 0 || -psi(thetaNew, params) < -psi(theta, params)) {
+        # cat('tolerance reached on log scale =', tolcriterion, '\n')
+        # print(paste("converged -- ", numsteps, " iters", sep = ''))
+        return(theta)
+      }
+
+      tolcriterion = abs(psi(thetaNew, params)-psi(theta, params))
+      theta = thetaNew
+      numsteps = numsteps + 1
+    }
+
+    if(numsteps == maxsteps)
+      warning('Maximum number of steps reached in Newton method.')
+
+
+    # print(paste("converged -- ", numsteps, " iters", sep = ''))
+    return(theta)
+
+  }
+
+
   radiata_model_obj$logz   = LIL
   radiata_model_obj$params = params
   radiata_model_obj$fix    = fix
