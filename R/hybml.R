@@ -14,6 +14,9 @@
 
 hybml = function(u_df, params, psi, grad, hess, u_0 = NULL, D = ncol(u_df) - 1) {
 
+    options(scipen = 999)
+    options(dplyr.summarise.inform = FALSE)
+
     ## fit the regression tree via rpart()
     u_rpart = rpart::rpart(psi_u ~ ., u_df)
 

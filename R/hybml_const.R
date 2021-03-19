@@ -18,7 +18,8 @@
 #### first stage partition
 #
 hybml_const_call = function(u_df) {
-
+    options(scipen = 999)
+    options(dplyr.summarise.inform = FALSE)
     # const_vec  = numeric(N_approx) # store constant approximation
     D = ncol(u_df) - 1
 
