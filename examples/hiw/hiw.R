@@ -1,7 +1,7 @@
 
 
-source("examples/hiw_helper.R")
-#
+source("examples/hiw/hiw_helper.R")
+library(dplyr)
 testG  = matrix(c(1,1,0,0,0,
                   1,1,1,1,1,
                   0,1,1,1,1,
@@ -27,7 +27,6 @@ Sigma_G = true_params$Sigma
 Omega_G = true_params$Omega # precision matrix -- this is the one we work with
 
 # chol(Omega_G)
-
 # Generate data Y based on Sigma_G
 N = 100
 Y = matrix(0, N, D)
@@ -37,7 +36,8 @@ for (i in 1:N) {
 
 S = t(Y) %*% Y
 
-params = list(N = N, D = D, D_0 = D_0, testG = testG, edgeInd = edgeInd,
+params = list(N = N, D = D, D_0 = D_0, D_u = D_u,
+              testG = testG, edgeInd = edgeInd,
               upperInd = upperInd, S = S, V = V, b = b)
 
 J = 5000
@@ -53,6 +53,10 @@ hess   = function(u, params) { pracma::hessian(psi, u, params = params) }
 
 hybridml::hybml_const(u_df)$zhat
 hybridml::hybml(u_df, params, grad = lambda, hess = hess)
+
+out = hybridml::hybml(u_df, params, grad = lambda, hess = hess)
+out$logz
+
 
 (LIL = logmarginal(Y, testG, b, V, S))
 

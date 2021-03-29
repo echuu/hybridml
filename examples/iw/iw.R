@@ -1,7 +1,9 @@
 
+# "C:/Users/ericc/Documents/hybridml"
 
 source("examples/iw/iw_helper.R")
 Rcpp::sourceCpp("examples/iw/fast_iw.cpp")
+library(dplyr)
 
 N = 100                     # number of observations
 D = 6                       # num rows/cols in the covariance matrix
@@ -16,7 +18,7 @@ nu    = D + 1               # degrees of freedom
 ## specify the true covariance matrix
 set.seed(1)
 Sigma = matrix(stats::rWishart(1, D, Omega), D)
-is.positive.definite(Sigma)
+matrixcalc::is.positive.definite(Sigma)
 
 ## (1) generate data
 X = mvtnorm::rmvnorm(N, mean = rep(0, D), sigma = Sigma) # (N x p)
@@ -35,7 +37,7 @@ post_samps = postIW$post_samps                 # (J x D_u)
 u_df = hybridml::preprocess(post_samps, D_u, params)
 
 ## true log marginal likelihood
-(LIL = lil(param_list))
+(LIL = lil(params))
 
 lambda = function(u, params) { pracma::grad(psi_covar, u, params = params) }
 hess   = function(u, params) { pracma::hessian(psi_covar, u, params = params) }
@@ -46,7 +48,7 @@ out1$logz
 out1$bounds
 
 ## hybrid approximation (EP)
-out2 = hybridml::hybml(u_df, param_list, grad = lambda, hess = hess)
+out2 = hybridml::hybml(u_df, params, grad = lambda, hess = hess)
 out2$logz
 out2$bounds
 
