@@ -47,6 +47,146 @@ u = u_df[1,1:D] %>% unname %>% unlist
 u
 pracma::hessian(psi, u, params = params)
 
+
+
+
+Psi_copy = matrix(0, p, p)
+i = 1
+for (c in 1:p) {
+  for (r in 1:c) {
+    if (G_5[r, c] > 0) {     # if free element, copy contents of u into Psi
+      Psi_copy[r,c] = u[i]
+      i = i + 1
+    } else  {         # non-free element
+      Psi_copy[r,c] = - sum(Psi_copy[r, r:(s-1)] * P[r:(s-1), s] / P[s, s]) +
+        Phi[r,s] / P[s, s]
+    }
+  }
+}
+
+
+Psi = Phi %*% solve(P)
+u = Psi[upper.tri(Psi, diag = T)][edgeInd]
+
+## TODO: populate elements of Psi_copy using u, rather than the actual Psi
+## matrix; currently can't do this bc u is stored in column order when extracted
+## from Psi, instead of row-order
+
+
+# matrix where (ij)-th element is TRUE iff G_5[i,j] is free, for i <= j
+# note: this is an upper triangular matrix
+FREE_PARAM_MAT = upper.tri(diag(1, 5), diag = T) & G_5
+u_mat = FREE_PARAM_MAT
+u_mat = matrix(0, p, p)
+u_mat[FREE_PARAM_MAT] = u
+u_mat
+
+## u_mat should have all the free elements
+for (i in 1:p) {
+  for (j in i:p) {
+    if (G_5[i,j] > 0) {
+      next # u_mat[i,j] already has value from input
+    } else {
+      if (i == 1) {
+        u_mat[i,j] = -1/P[j,j] * sum(u_mat[i,i:(j-1)] * P[i:(j-1), j])
+      } else {
+        # for rows other than first row
+        x0 = -1/P[j,j] * sum(u_mat[i,i:(j-1)] * P[i:(j-1), j])
+
+        # Psi_copy[i,j] = x0 -
+        #   sum(Phi[1:(i-1),i] / P[i,i] / (Phi[i,i] / P[j,j]) *
+        #         Phi[1:(i-1), j] / P[j,j])
+
+        tmp = numeric(i-1)
+        for (r in 1:(i-1)) {
+          tmp1 = u_mat[r,i] + sum(u_mat[r,r:(i-1)] * P[r:(i-1),i] / P[i,i])
+          tmp2 = u_mat[r,j] + sum(u_mat[r,r:(j-1)] * P[r:(i-1),j] / P[j,j])
+          tmp[r] = tmp1 * tmp2
+        }
+        u_mat[i,j] = x0 - 1 / u_mat[i,i] * sum(tmp)
+      }
+    }
+  }
+}
+
+u_mat
+Psi
+all.equal(u_mat, Psi)
+
+
+Psi_copy = matrix(0, p, p)
+k = 1
+for (i in 1:p) {
+  for (j in i:p) {
+    if (G_5[i,j] > 0) {
+      Psi_copy[i,j] = Psi[i,j]
+      k = k + 1
+    } else {
+      if (i == 1) {
+        Psi_copy[i,j] = -1/P[j,j] * sum(Psi_copy[i,i:(j-1)] * P[i:(j-1), j])
+      } else {
+        # for rows other than first row
+        x0 = -1/P[j,j] * sum(Psi_copy[i,i:(j-1)] * P[i:(j-1), j])
+
+        # Psi_copy[i,j] = x0 -
+        #   sum(Phi[1:(i-1),i] / P[i,i] / (Phi[i,i] / P[j,j]) *
+        #         Phi[1:(i-1), j] / P[j,j])
+
+        tmp = numeric(i-1)
+        for (r in 1:(i-1)) {
+          tmp1 = Psi_copy[r,i] + sum(Psi_copy[r,r:(i-1)] * P[r:(i-1),i] / P[i,i])
+          tmp2 = Psi_copy[r,j] + sum(Psi_copy[r,r:(j-1)] * P[r:(i-1),j] / P[j,j])
+          tmp[r] = tmp1 * tmp2
+        }
+        Psi_copy[i,j] = x0 - 1 / Psi_copy[i,i] * sum(tmp)
+      }
+    }
+  }
+}
+
+
+
+Psi_copy
+Psi
+
+all.equal(Psi_copy, Psi)
+
+
+
+
+
+test = function(u, params) {
+
+  Phi     = params$Phi
+  P       = params$P
+  G_5     = params$G_5
+  p       = params$p
+  edgeInd = params$edgeInd
+  b       = params$b
+  nu_i    = params$nu_i
+  b_i     = params$b_i
+
+  Psi_copy = matrix(0, p, p)
+
+  i = 1
+  for (c in 1:p) {
+    for (r in 1:c) {
+      if (G_5[r, c] > 0) {     # if free element, copy contents of u into Psi
+        Psi_copy[r,c] = u[i]
+        i = i + 1
+      } else  {         # non-free element
+        Psi_copy[r,c] = - sum(Psi_copy[r, r:(s-1)] * P[r:(s-1), s] / P[s, s]) +
+          Phi[r,s] / P[s, s]
+      }
+    }
+  }
+
+
+
+}
+
+
+
 psi = function(u, params) {
 
   Phi     = params$Phi
