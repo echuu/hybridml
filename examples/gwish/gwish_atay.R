@@ -50,6 +50,8 @@ pracma::hessian(psi, u, params = params)
 
 
 
+
+
 Psi_copy = matrix(0, p, p)
 i = 1
 for (c in 1:p) {
@@ -68,10 +70,35 @@ for (c in 1:p) {
 Psi = Phi %*% solve(P)
 u = Psi[upper.tri(Psi, diag = T)][edgeInd]
 
+
+
+
+samps = samplegw(2, G_5, b, N, V, S, FREE_PARAMS_ALL)
+
+u = samps$Psi_free[1,]
+z = samps$Phi[1,]
+Psi = matrix(samps$Psi[1,], p, p)
+
+## not re-writing terms in terms of free params
+pracma::grad(test, u, obj = obj)
+
+## gradient using terms expressed as a function of free params
+obj = list(z0 = samps$Phi[1,],
+           z1 = samps$Psi[1,])
+
+test(u, obj)
+test1(u, samps)
+
+pracma::grad(test,  u, obj = obj)
+pracma::grad(test1, u, obj = obj)
+
+cbind(pracma::grad(test,  u, obj = obj),
+      pracma::grad(test1, u, obj = obj))
+
+
 ## TODO: populate elements of Psi_copy using u, rather than the actual Psi
 ## matrix; currently can't do this bc u is stored in column order when extracted
 ## from Psi, instead of row-order
-
 
 # matrix where (ij)-th element is TRUE iff G_5[i,j] is free, for i <= j
 # note: this is an upper triangular matrix
@@ -112,6 +139,10 @@ for (i in 1:p) {
 u_mat
 Psi
 all.equal(u_mat, Psi)
+
+
+
+
 
 
 Psi_copy = matrix(0, p, p)
