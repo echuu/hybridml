@@ -24,7 +24,7 @@ V = n * diag(1, p)
 
 edgeInd = G_5[upper.tri(G_5, diag = TRUE)] %>% as.logical
 
-(LIL = log(2^(0.5*p*b + 7)) + I_G(0.5*(b-2)))
+# (LIL = log(2^(0.5*p*b + 7)) + I_G(0.5*(b-2)))
 
 (truth = log(2^(0.5*p*b + 7)) + I_G(0.5*(b-2)) + (-0.5 * p * b - 7) * log(n))
 gnorm(G_5, b, V, 100)
@@ -36,7 +36,14 @@ for (i in 1:p) {
   nu_i[i] = length(ne[ne > i])
 }
 
-k_i = (1:p) - 1
+FREE_PARAMS_ALL = c(upper.tri(diag(1, p), diag = T) & G_5)
+
+
+## construct A matrix so that we can compute k_i
+A = (upper.tri(diag(1, p), diag = F) & G_5) + 0
+
+k_i  = colSums(A) # see step 2, p. 329 of Atay
+nu_i = rowSums(A) # see step 2, p. 329 of Atay
 b_i = nu_i + k_i + 1
 b_i
 
@@ -48,7 +55,7 @@ P = chol(solve(V)) # upper cholesky factor; D^(-1) = TT'  in Atay paper
 params = list(G_5 = G_5, P = P, p = p, edgeInd = edgeInd,
               b = b, nu_i = nu_i, b_i = b_i)
 
-J = 1000
+J = 5000
 N = 0
 S = matrix(0, p, p)
 D = sum(edgeInd) # number of free parameters / dimension of parameter space
@@ -65,7 +72,6 @@ D = sum(edgeInd) # number of free parameters / dimension of parameter space
 #
 # matrix(Psi[,1], p, p)
 
-FREE_PARAMS_ALL = c(upper.tri(diag(1, p), diag = T) & G_5)
 
 ########################
 
@@ -95,15 +101,16 @@ logzhat
 n_sims = 100
 hyb = numeric(n_sims)
 gnorm_approx = numeric(n_sims)
-bridge= numeric(n_sims)
+bridge = numeric(n_sims)
 j = 1
 set.seed(1)
 while (j <= n_sims) {
-  samps = samplegw(J, G_5, b, N, V, S, P, FREE_PARAMS_ALL)
+
+  samps = samplegw(J, G_5, b, N, V, S, solve(P), FREE_PARAMS_ALL)
   u_samps = samps$Psi_free %>% data.frame
 
   u_df = preprocess(u_samps, D, params)     # J x (D_u + 1)
-  u_df %>% head
+  # u_df %>% head
 
   hyb[j] = hybridml::hybml(u_df, params, psi = psi, grad = grad,
                            hess = hess, u_0 = u_star)$logz
@@ -125,23 +132,31 @@ while (j <= n_sims) {
   ### bridge estimator ---------------------------------------------------------
 
   gnorm_approx[j] = gnorm(G_5, b, V, J)
-  print(paste('iter ', j, ': ', round(mean(hyb[hyb!=0]), 3),
-              ' (error = ', round(mean(LIL - hyb[hyb!=0]), 3), ')', sep = ''))
+
+  print(paste('iter ', j, ': ',
+              round(mean(hyb[hyb!=0]), 3),
+              ' (error = ',
+              round(mean(truth - hyb[hyb!=0]), 3), ')',
+              sep = ''))
+
+  print(paste('iter ', j, ': ',
+              round(mean(gnorm_approx[gnorm_approx!=0]), 3),
+              ' (error = ',
+              round(mean(truth - gnorm_approx[gnorm_approx!=0]), 3),
+              ')', sep = ''))
   j = j + 1
 }
 
 
-truth = LIL
 
 approx = data.frame(truth, hyb = hyb, gnorm = gnorm_approx, bridge = bridge)
 approx_long = reshape2::melt(approx, id.vars = 'truth')
 
 
 data.frame(logz = colMeans(approx), approx_sd = apply(approx, 2, sd),
-           avg_error = colMeans(LIL - approx))
+           avg_error = colMeans(truth - approx))
 
 
-hybridml::hybml_const(u_df)$logz
 
 # test hybrid algorithm --------------------------------------------------------
 
@@ -156,6 +171,10 @@ param_support = extractSupport(u_df, D) #
 u_partition = extractPartition(u_rpart, param_support)
 
 #### extension starts here -------------------------------------------------
+
+log_density = function(u, data) {
+  -psi(u, data)
+}
 
 ### (1) find global mean
 grad = function(u, params) { pracma::grad(psi, u, params = params) }

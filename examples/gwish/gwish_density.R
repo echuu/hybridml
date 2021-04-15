@@ -10,8 +10,16 @@ psi = function(u, params) {
   P     = params$P
   b_i   = params$b_i
 
+  # print(paste("p = ", p, sep = ''))
+  # print(paste("b = ", b, sep = ''))
+  # cat("nu_i =", nu_i, '\n')
+  # cat("P = ", '\n')
+  # print(P)
+  # cat("b_i =", b_i, '\n')
+
+
   ## first reconstruct entire Psi matrix
-  Psi_copy = matrix(0, p, p)
+  # Psi_copy = matrix(0, p, p)
   # Phi = matrix(obj$z0, p, p)
 
   FREE_PARAM_MAT = upper.tri(diag(1, p), diag = T) & G_5
@@ -51,6 +59,8 @@ psi = function(u, params) {
       }
     }
   }
+
+  # print(u_mat)
 
   t0 = p * log(2) +
     sum((b + b_i - 1) * log(diag(P)) + (b + nu_i - 1) * log(diag(u_mat)))
