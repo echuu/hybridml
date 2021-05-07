@@ -4,7 +4,7 @@
 psi = function(u, params) {
 
   p     = params$p
-  G_5   = params$G_5
+  G     = params$G
   b     = params$b
   nu_i  = params$nu_i
   P     = params$P
@@ -22,7 +22,7 @@ psi = function(u, params) {
   # Psi_copy = matrix(0, p, p)
   # Phi = matrix(obj$z0, p, p)
 
-  FREE_PARAM_MAT = upper.tri(diag(1, p), diag = T) & G_5
+  FREE_PARAM_MAT = upper.tri(diag(1, p), diag = T) & G
   u_mat = FREE_PARAM_MAT
   u_mat = matrix(0, p, p)
   u_mat[FREE_PARAM_MAT] = u
@@ -31,7 +31,7 @@ psi = function(u, params) {
   ## u_mat should have all the free elements
   for (i in 1:p) {
     for (j in i:p) {
-      if (G_5[i,j] > 0) {
+      if (G[i,j] > 0) {
         next # u_mat[i,j] already has value from input
       } else {
         if (i == 1) {
@@ -51,7 +51,10 @@ psi = function(u, params) {
           tmp = numeric(i-1)
           for (r in 1:(i-1)) {
             tmp1 = u_mat[r,i] + sum(u_mat[r,r:(i-1)] * P[r:(i-1),i] / P[i,i])
-            tmp2 = u_mat[r,j] + sum(u_mat[r,r:(j-1)] * P[r:(i-1),j] / P[j,j])
+            tmp2 = u_mat[r,j] + sum(u_mat[r,r:(j-1)] * P[r:(j-1),j] / P[j,j])
+            # print(length(u_mat[r,r:(j-1)]))
+            # print(length(P[r:(j-1),j]))
+            # print(tmp2)
             tmp[r] = tmp1 * tmp2
           }
           u_mat[i,j] = x0 - 1 / u_mat[i,i] * sum(tmp)

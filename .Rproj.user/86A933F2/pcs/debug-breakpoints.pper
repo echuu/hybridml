@@ -1,5 +1,21 @@
 {
     "debugBreakpointsState": {
-        "breakpoints": []
+        "breakpoints": [
+            {
+                "id": 1,
+                "path": "~/hybridml/examples/gwish/gwish_density.R",
+                "line_number": 29,
+                "function_steps": "",
+                "function_name": "psi",
+                "state": 2,
+                "editor_state": 2,
+                "editor_line_number": 29,
+                "is_pending_debug_completion": false,
+                "needs_updated_steps": false,
+                "type": 0,
+                "is_package_breakpoint": false,
+                "package_name": ""
+            }
+        ]
     }
 }

@@ -16,7 +16,7 @@ G_5 = matrix(c(1,1,0,1,1,
                0,1,1,1,1,
                1,0,1,1,1,
                1,0,1,1,1), p, p)
-b = 3
+b = 100
 n = 10
 V = n * diag(1, p)
 
@@ -54,8 +54,6 @@ P = chol(solve(V)) # upper cholesky factor; D^(-1) = TT'  in Atay paper
 
 params = list(G_5 = G_5, P = P, p = p, edgeInd = edgeInd,
               b = b, nu_i = nu_i, b_i = b_i)
-
-J = 5000
 N = 0
 S = matrix(0, p, p)
 D = sum(edgeInd) # number of free parameters / dimension of parameter space
@@ -74,7 +72,7 @@ D = sum(edgeInd) # number of free parameters / dimension of parameter space
 
 
 ########################
-
+J = 200
 samps = samplegw(J, G_5, b, N, V, S, solve(P), FREE_PARAMS_ALL)
 u_samps = samps$Psi_free %>% data.frame
 
@@ -90,15 +88,19 @@ u_star
 # MAP_LOC = which(u_df$psi_u == min(u_df$psi_u))
 # u_0 = u_df[MAP_LOC,1:D] %>% unname() %>% unlist()
 # u_star = u_0
-gnorm(G_5, b, V, 100)
+gnorm(G_5, b, V, J)
 logzhat = hybridml::hybml(u_df, params, psi = psi, grad = grad, hess = hess, u_0 = u_star)$logz
+# logzhat = hybml(u_df, params, psi = psi, grad = grad, hess = hess, u_0 = u_star)$logz
+
 logzhat
+truth
 # hybridml::hybml_const(u_df)$logz
 
 (truth - logzhat)
+truth - gnorm(G_5, b, V, 50)
 
 
-n_sims = 100
+n_sims = 30
 hyb = numeric(n_sims)
 gnorm_approx = numeric(n_sims)
 bridge = numeric(n_sims)
@@ -112,8 +114,11 @@ while (j <= n_sims) {
   u_df = preprocess(u_samps, D, params)     # J x (D_u + 1)
   # u_df %>% head
 
-  hyb[j] = hybridml::hybml(u_df, params, psi = psi, grad = grad,
+  # hyb[j] = hybridml::hybml(u_df, params, psi = psi, grad = grad,
+  #                          hess = hess, u_0 = u_star)$logz
+  hyb[j] = hybml(u_df, params, psi = psi, grad = grad,
                            hess = hess, u_0 = u_star)$logz
+
 
   ### bridge estimator ---------------------------------------------------------
   u_samp = as.matrix(u_samps)
@@ -139,11 +144,12 @@ while (j <= n_sims) {
               round(mean(truth - hyb[hyb!=0]), 3), ')',
               sep = ''))
 
-  print(paste('iter ', j, ': ',
-              round(mean(gnorm_approx[gnorm_approx!=0]), 3),
-              ' (error = ',
-              round(mean(truth - gnorm_approx[gnorm_approx!=0]), 3),
-              ')', sep = ''))
+  # print(paste('iter ', j, ': ',
+  #             round(mean(gnorm_approx[gnorm_approx!=0]), 3),
+  #             ' (error = ',
+  #             round(mean(truth - gnorm_approx[gnorm_approx!=0]), 3),
+  #             ')', sep = ''))
+
   j = j + 1
 }
 
@@ -172,20 +178,20 @@ u_partition = extractPartition(u_rpart, param_support)
 
 #### extension starts here -------------------------------------------------
 
-log_density = function(u, data) {
-  -psi(u, data)
-}
-
-### (1) find global mean
-grad = function(u, params) { pracma::grad(psi, u, params = params) }
-hess = function(u, params) { pracma::hessian(psi, u, params = params) }
-u_star = globalMode(u_df)
-u_star
-
-### (1) find global mean
-MAP_LOC = which(u_df$psi_u == min(u_df$psi_u))
-u_0 = u_df[MAP_LOC,1:D] %>% unname() %>% unlist()
-u_star = u_0
+# log_density = function(u, data) {
+#   -psi(u, data)
+# }
+#
+# ### (1) find global mean
+# grad = function(u, params) { pracma::grad(psi, u, params = params) }
+# hess = function(u, params) { pracma::hessian(psi, u, params = params) }
+# u_star = globalMode(u_df)
+# u_star
+#
+# ### (1) find global mean
+# MAP_LOC = which(u_df$psi_u == min(u_df$psi_u))
+# u_0 = u_df[MAP_LOC,1:D] %>% unname() %>% unlist()
+# u_star = u_0
 
 
 ### (2) find point in each partition closest to global mean (for now)

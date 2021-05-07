@@ -8,6 +8,24 @@ testG  = matrix(c(1,1,0,0,0,
                   0,1,1,1,1,
                   0,1,1,1,1), 5, 5)
 
+
+# Given graph testG ------------------------------------------------------------
+testG = matrix(c(1,1,0,0,1,0,0,0,0,
+                 1,1,1,1,1,0,0,0,0,
+                 0,1,1,1,0,0,0,0,0,
+                 0,1,1,1,1,1,1,0,0,
+                 1,1,0,1,1,1,0,0,0,
+                 0,0,0,1,1,1,1,1,1,
+                 0,0,0,1,0,1,1,1,1,
+                 0,0,0,0,0,1,1,1,1,
+                 0,0,0,0,0,1,1,1,1), 9, 9)
+
+a = c(1, 3, 2, 5, 4, 6, 7, 8, 9)
+testG = testG[a, a]
+
+# ------------------------------------------------------------------------------
+
+
 D = nrow(testG)
 b = 3          # prior degrees of freedom
 V = diag(1, D) # prior scale matrix
@@ -51,12 +69,8 @@ u_df = hybridml::preprocess(post_samps, D_u, params)     # J x (D_u + 1)
 lambda = function(u, params) { pracma::grad(psi, u, params = params) }
 hess   = function(u, params) { pracma::hessian(psi, u, params = params) }
 
-hybridml::hybml_const(u_df)$zhat
-hybridml::hybml(u_df, params, grad = lambda, hess = hess)
-
 out = hybridml::hybml(u_df, params, grad = lambda, hess = hess)
 out$logz
-
 
 (LIL = logmarginal(Y, testG, b, V, S))
 
