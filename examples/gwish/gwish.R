@@ -36,7 +36,7 @@ G_9 = G_9[a, a]
 # G_0 = diag(1, n_decomp) %x% G_9
 
 n_G0 = 1
-n_G1 = 1
+n_G1 = 0
 G0 = diag(1, n_G0) %x% G_5
 G1 = diag(1, n_G1) %x% G_9
 
@@ -184,7 +184,7 @@ bridge_result = bridgesampling::bridge_sampler(samples = u_samp,
                                                log_posterior = log_density,
                                                data = params,
                                                lb = lb, ub = ub,
-                                               method = 'warp3',
+                                               method = 'normal',
                                                silent = TRUE)
 bridge_result$logml
 abs(Z - bridge_result$logml)

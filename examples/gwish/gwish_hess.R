@@ -4,8 +4,6 @@
 i = 3; j = 4;
 1 + dpsi_rs(1, 3, i, j)^2 + dpsi_rs(2, 4, i, j)^2 + dpsi_rs(2, 5, i, j)^2
 
-
-
 u_df %>% head
 u = u_df[1,1:D] %>% unlist %>% unname
 psi_mat = create_psi_mat(u, params)

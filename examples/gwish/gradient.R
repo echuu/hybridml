@@ -118,19 +118,38 @@ d1 = function(r, s, i, j, psi_mat, G) {
 
       ## TODO: check values of psi_ks, psi_kr -- if 0, then can save calculation
       ##       on the derivative
-
-      if (i == j && r == i && G[r,s] == 0) {
-        tmp_sum[k] = 1/psi_mat[r,r]^2 * psi_mat[k,r] * psi_mat[k,s] -
-          1/psi_mat[r,r] * (
-            d1(k, r, i, j, psi_mat, G) * psi_mat[k, s] +
-              d1(k, s, i, j, psi_mat, G) * psi_mat[k, r]
-          )
+      if (psi_mat[k,s] == 0 && psi_mat[k,r] == 0) {
+        # print("both terms 0, save recursion")
+        tmp_sum[k] = 0
+        next
       } else {
-        tmp_sum[k] = -1/psi_mat[r,r] * (
-          d1(k, r, i, j, psi_mat, G) * psi_mat[k, s] +
+
+        if (psi_mat[k,s] == 0) { ## if psi_ks is 0
+          # print("saving on ks = 0")
+          tmp_sum[k] = -1/psi_mat[r,r] *
             d1(k, s, i, j, psi_mat, G) * psi_mat[k, r]
-        )
+        } else if (psi_mat[k,r] == 0) { ## if psi_kr is 0
+          # print("saving on kr = 0")
+          tmp_sum[k] = -1/psi_mat[r,r] *
+            d1(k, r, i, j, psi_mat, G) * psi_mat[k, s]
+        } else {
+
+          if (i == j && r == i && G[r,s] == 0) {
+            tmp_sum[k] = 1/psi_mat[r,r]^2 * psi_mat[k,r] * psi_mat[k,s] -
+              1/psi_mat[r,r] * (
+                d1(k, r, i, j, psi_mat, G) * psi_mat[k, s] +
+                  d1(k, s, i, j, psi_mat, G) * psi_mat[k, r]
+              )
+          } else {
+            tmp_sum[k] = -1/psi_mat[r,r] * (
+              d1(k, r, i, j, psi_mat, G) * psi_mat[k, s] +
+                d1(k, s, i, j, psi_mat, G) * psi_mat[k, r]
+            )
+          }
+        }
       }
+
+
     } # end for()
 
     return(sum(tmp_sum)) ## expression derived from Eq. (99)

@@ -3,6 +3,8 @@
 library(BDgraph)
 library(dplyr)
 
+source("examples/gwish/gwish_density.R")
+
 I_G = function(delta) {
   7/2 * log(pi) + lgamma(delta + 5/2) - lgamma(delta + 3) +
     lgamma(delta + 1) + lgamma(delta + 3/2) + 2 * lgamma(delta + 2) +
@@ -97,11 +99,26 @@ u_df %>% head
 grad = function(u, params) { pracma::grad(psi, u, params = params) }
 hess = function(u, params) { pracma::hessian(psi, u, params = params) }
 
+u_star = globalMode(u_df)
+u_star
+
 grad = function(u, params) { f(u, params)  }
 hess = function(u, params) { ff(u, params) }
 
 u_star = globalMode(u_df)
 u_star
+
+u_df %>% head
+u = u_df[1,1:D] %>% unlist %>% unname
+
+microbenchmark(numer = pracma::hessian(psi, u, params = params),
+               closed = ff(u, params),
+               times = 20)
+
+profvis(ff(u, params))
+
+ff(u, params)
+
 
 ### (1) find global mean
 # MAP_LOC = which(u_df$psi_u == min(u_df$psi_u))
