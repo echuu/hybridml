@@ -8,7 +8,7 @@
 ### the following functions need to be passed into the function
 ### (1) psi     :  negative log posterior
 ### (2) grad    :  gradient of the negative log posterior
-### (3) hess    :  hessian of the negative log posterior
+### (3) hess    :  hessian of the nAfternoon Rideegative log posterior
 
 hybml = function(u_df, params, psi, grad, hess, u_0 = NULL, D = ncol(u_df) - 1) {
 

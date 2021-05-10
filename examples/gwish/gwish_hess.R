@@ -39,7 +39,7 @@ for (d in 1:D) {
       rr = vbar[a, 1] # row index of non-free element
       ss = vbar[a, 2] # col index of non-free element
 
-      tmp = tmp + dpsi_rs(rr, ss, i, j)^2
+      tmp = tmp + d1(obj, rr, ss, i, j)^2
     }
     if (tmp != 0) {print("tmp != 0")}
 
@@ -51,7 +51,7 @@ for (d in 1:D) {
       rr = vbar[a, 1] # row index of non-free element
       ss = vbar[a, 2] # col index of non-free element
 
-      tmp = tmp + dpsi_rs(rr, ss, i, j)^2
+      tmp = tmp + d1(obj, rr, ss, i, j)^2
     }
 
     H[d,d] = 1 + tmp
@@ -84,6 +84,7 @@ dpsi_rs(1,3,k,l) * dpsi_rs(1,3,i,j) +
   dpsi_rs(2,4,k,l) * dpsi_rs(2,4,i,j) - psi_mat[2,4] / psi_mat[2,2] +
   dpsi_rs(2,5,k,l) * dpsi_rs(2,5,i,j)
 
+d2(i,j,k,l)
 
 
 i = 1; j = 2;
@@ -92,18 +93,39 @@ dpsi_rs(1,3,k,l) * dpsi_rs(1,3,i,j) +
   dpsi_rs(2,4,k,l) * dpsi_rs(2,4,i,j) +
   dpsi_rs(2,5,k,l) * dpsi_rs(2,5,i,j) - psi_mat[2,5] / psi_mat[2,2]
 
-d = 1
-for (k in 1:(p-1)) {
-  for (l in (r+1):(p-1)) {
 
-    i = t_ind[d,1] # row index of first derivative
-    j = t_ind[d,2] # col index of first derivative
+#### implementation starts here ------------------------------------------------
 
-    # compute d^2(Psi) / d(Psi_ij) d(Psi_kl)
-    H[k,l] = d2(i, j, k, l)
+### Populate the hessian matrix. This is a (D x D) matrix, where D = p(p+1)/2
+### outer loop: iterate over the row of the 2nd order derivative
+### inner loop: iterate over the col of the 2nd order derivative
+### We use t_ind in 2 ways:
+### (1) uniquely identify the row that we are in (1st order derivative)
+### (2) lets us iterate through the 2nd order derivatives
+###
+for (r in 1:(D-1)) {
 
-  }
-}
+  # obtain matrix index of the 1st order derivative (uniquely ID row)
+  i = t_ind[r,1] # 1st order row index
+  j = t_ind[r,2] # 2nd order col index
+
+  for (c in (r+1):D) { # start on the column after the diagonal
+    # obtain matrix index of the 2nd order derivative
+    # d^2(psi) / (dpsi_ij dpsi_kl)
+    k = t_ind[c,1] # 2nd order row index
+    l = t_ind[c,2] # 2nd order col index
+
+    # if (r == 3 && c == 12) {
+    #   print(paste('i = ', i, ', j = ', j, ', k = ', k, ', l = ', l, sep = ''))
+    # }
+
+    H[r,c] = d2(i, j, k, l)
+    H[c,r] = H[r,c]
+  } # end for loop over the columns
+} # end outer for loop over rows
+
+H
+round(hess(u, params), 6)
 
 d2(1,2,1,5)
 
@@ -114,9 +136,9 @@ d2 = function(i, j, k, l) {
     r = vbar[n,1]
     s = vbar[n,2]
     if (psi_mat[r,s] == 0) { # avoid needless recursion if coefficient is 0
-      tmp[n] = dpsi_rs(r,s,k,l) * dpsi_rs(r,s,i,j)
+      tmp[n] = d1(r,s,k,l) * d1(r,s,i,j)
     } else {
-      tmp[n] = dpsi_rs(r,s,k,l) * dpsi_rs(r,s,i,j) + psi_mat[r,s] * d2_rs(r,s,i,j,k,l)
+      tmp[n] = d1(r,s,k,l) * d1(r,s,i,j) + psi_mat[r,s] * d2_rs(r,s,i,j,k,l)
     }
   } # end for loop iterating over non-free elements
   return(sum(tmp))
@@ -135,40 +157,110 @@ d2_rs = function(r, s, i, j, k, l) {
   # general case: recursive call for the 2nd order derivative
   tmp = numeric(r-1)
   for (m in 1:(r-1)) {
-    tmp[m] = - 1 / psi_mat[r,r] *
-      dpsi_rs(m,r,i,j) * dpsi_rs(m,s,k,l) + dpsi_rs(m,r,k,l) * dpsi_rs(m,s,i,j) +
-      d2_rs(m,r,i,j,k,l) + d2_rs(m,s,i,j,k,l)
+
+    if (r == i && i == j) { # case: d^2(psi_rs) / (dpsi_rr dpsi_kl)
+      tmp[m] = 1/psi_mat[r,r]^2 *
+        (d1(m,r,k,l) * psi_mat[m,s] + psi_mat[m,r] * d1(m,s,k,l)) -
+        1/psi_mat[r,r] *
+        (d2_rs(m,r,i,j,k,l) * psi_mat[m,s] + d2_rs(m,s,i,j,k,l) * psi_mat[m,r] +
+            d1(m,r,i,j) * d1(m,s,k,l) + d1(m,r,k,l) * d1(m,s,i,j))
+    } else if (r == k && k == l) { # case: d^2(psi_rs) / (dpsi_ij dpsi_rs)
+      tmp[m] = d2_rs(r,s,k,l,i,j) # flip the order so we get into the first if()
+    } else {
+      ### case: r != i
+      tmp[m] = - 1 / psi_mat[r,r] *
+        (d1(m,r,i,j) * d1(m,s,k,l) + d1(m,r,k,l) * d1(m,s,i,j) +
+           d2_rs(m,r,i,j,k,l) + d2_rs(m,s,i,j,k,l))
+    }
+
   }
 
   return(sum(tmp))
 } # end d2_rs() function
 
-# d^2(psi_25) / (dpsi_12 dpsi_15) = - 1/psi_22
--1/psi_mat[2,2]
-r = 2; s = 4; i = 1; j = 2; k = 1; l = 4;
+
+
+round(hess(u, params), 6)
+## manual calculation for: d psi / ( d(psi_12) d(psi_22) )
+- psi_mat[1,2] * psi_mat[1,4]^2 / psi_mat[2,2]^3 +
+  psi_mat[2,4] * psi_mat[1,4] / psi_mat[2,2]^2 -
+  psi_mat[1,2] * psi_mat[1,5]^2 / psi_mat[2,2]^3 +
+  psi_mat[2,5] * psi_mat[1,5] / psi_mat[2,2]^2
+# -0.00006588557
+
+# compare to closed form calculation:
+i = 1; j = 2; k = 2; l = 2;
+d2(i, j, k, l)
+
+## check closed form
+r = 2
+1/psi_mat[r,r]^2 * psi_mat[1,2] * psi_mat[2,4] +
+  1/psi_mat[2,2]^2 * psi_mat[1,2] * psi_mat[1,4]
+
+
+H[3,5]
+hess(u, params)[3,5]
+
+
+## another check dpsi / dpsi_22 dpsi_14
+H[3,6]
+hess(u, params)[3,6]
+-psi_mat[1,2]^2 * psi_mat[1,4] / psi_mat[2,2]^3 + psi_mat[2,4] * psi_mat[1,2] / psi_mat[2,2]^2
+
+
+## another check dpsi / dpsi_22 dpsi_15
+H[3,9]
+hess(u, params)[3,9]
+-psi_mat[1,2]^2 * psi_mat[1,5] / psi_mat[2,2]^3 + psi_mat[2,5] * psi_mat[1,2] / psi_mat[2,2]^2
+
+## another check dpsi / dpsi_22 dpsi_55
+H[3,12]
+hess(u, params)[3,12]
+
+H_0 = hess(u, params)
+all.equal(
+  H_0[upper.tri(H_0)],
+  H[upper.tri(H)]
+)
+
+
+## matching terms:
+# (1)
+d1(2,4,1,2) * d1(2,4,2,2)
+-psi_mat[1,4]^2 * psi_mat[1,2] / psi_mat[2,2]^3
+
+# (3)
+d1(2,5,1,2) * d1(2,5,2,2)
+-psi_mat[1,5]^2 * psi_mat[1,2] / psi_mat[2,2]^3
+
+# (2) currently returning the wrong thing
+psi_mat[2,4] * d2_rs(2,4,2,2,1,2)
+
+r = 2; s = 4; i = 2; j = 2; k = 1; l = 2;
+r = 2; s = 4; i = 1; j = 2; k = 2; l = 2;
+r == i
+# closed form of d^2(psi_24) / (dpsi_22 dpsi_12)
 d2_rs(r,s,i,j,k,l)
 
+## true value of d^2(psi_24) / (dpsi_22 dpsi_12)
+psi_mat[1,4] / psi_mat[2,2]^2
 
-
-
-if (G[r, s] > 0) {
-  if (r == i && s == j) { #
-    return(0)
-  } else {                #
-    return(0)
-  }
-}
-
-if (i > r)                            { return(0) } # (i,j) comes after (r,s)
-if (i == r && j > s)                  { return(0) } # same row, but after
-if (i == r && j == s && G[r, s] == 0) { return(0) } # deriv wrt to non-free: 0
-if (r == 1 && s > r)                  { return(0) } # first row case
-
-
-
-if (r > 1) {
+## check this one because it will get flagged by the first if, but it technically
+## belongs in the last else()
+r = 2; s = 4; i = 2; j = 2; k = 1; l = 3;
 
 
 
 
-}
+
+
+
+
+
+
+
+
+
+
+
+

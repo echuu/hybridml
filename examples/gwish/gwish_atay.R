@@ -52,11 +52,26 @@ Omega_G = rgwish(1, G_5, b, V) # generate the true precision matrix
 
 P = chol(solve(V)) # upper cholesky factor; D^(-1) = TT'  in Atay paper
 
-params = list(G_5 = G_5, P = P, p = p, edgeInd = edgeInd,
-              b = b, nu_i = nu_i, b_i = b_i)
+
+index_mat = matrix(0, p, p)
+index_mat[upper.tri(index_mat, diag = T)][edgeInd] = 1:D
+index_mat[upper.tri(index_mat, diag = T)]
+t_ind = which(index_mat!=0,arr.ind = T)
+t_ind
+
+index_mat[lower.tri(index_mat)] = NA
+vbar = which(index_mat==0,arr.ind = T) # non-free elements
+n_nonfree = nrow(vbar)
+
+
 N = 0
 S = matrix(0, p, p)
 D = sum(edgeInd) # number of free parameters / dimension of parameter space
+
+params = list(G_5 = G_5, P = P, p = p, D = D, edgeInd = edgeInd,
+              b = b, nu_i = nu_i, b_i = b_i,
+              t_ind = t_ind, n_nonfree = n_nonfree, vbar = vbar)
+
 
 ########################
 
@@ -81,6 +96,10 @@ u_df %>% head
 
 grad = function(u, params) { pracma::grad(psi, u, params = params) }
 hess = function(u, params) { pracma::hessian(psi, u, params = params) }
+
+grad = function(u, params) { f(u, params)  }
+hess = function(u, params) { ff(u, params) }
+
 u_star = globalMode(u_df)
 u_star
 
@@ -91,9 +110,10 @@ u_star
 gnorm(G_5, b, V, J)
 logzhat = hybridml::hybml(u_df, params, psi = psi, grad = grad, hess = hess, u_0 = u_star)$logz
 # logzhat = hybml(u_df, params, psi = psi, grad = grad, hess = hess, u_0 = u_star)$logz
-
 logzhat
 truth
+
+
 # hybridml::hybml_const(u_df)$logz
 
 (truth - logzhat)

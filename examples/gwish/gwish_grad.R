@@ -75,41 +75,6 @@ all.equal(psi_mat, matrix(samps$Psi[1,], p, p))
 
 # G = G_5
 
-f = function() {
-  gg = matrix(0, p, p)
-  for (i in 1:p) {
-    for (j in i:p) {
-      if (G[i, j] == 0) {
-        gg[i,j] = 0
-      } else {
-        gg[i,j] = dpsi(i,j) ## dpsi / dpsi_ij
-      }
-    }
-  }
-
-  return(gg[upper.tri(gg, diag = TRUE)][edgeInd])
-}
-
-
-library(microbenchmark)
-## closed form is about 100x faster, closed form can def be made faster too
-microbenchmark(f1 = f(), f2 = grad(u, params))
-gg
-tmp = matrix(0, p, p)
-tmp[upper.tri(tmp, diag = TRUE)][edgeInd] = grad(u, params)
-tmp
-
-## extract only free elements into gradient vector
-gg[upper.tri(gg, diag = TRUE)][edgeInd]
-tmp[upper.tri(tmp, diag = TRUE)][edgeInd]
-
-data.frame(
-  form = gg[upper.tri(gg, diag = TRUE)][edgeInd],
-  numer = tmp[upper.tri(tmp, diag = TRUE)][edgeInd]
-) %>% mutate(diff = abs(form - numer))
-
-
-
 all.equal(gg, tmp)
 
 dpsi(1, 1)
@@ -145,7 +110,7 @@ dpsi = function(i, j) {
             # print("skipping derivative calculation")
             next
           }
-          d_ij = d_ij + psi_mat[r,s] * dpsi_rs(r, s, i, j)
+          d_ij = d_ij + psi_mat[r,s] * d1(r, s, i, j)
         }
       }
     }
@@ -166,7 +131,7 @@ dpsi = function(i, j) {
             # print("skipping derivative calculation")
             next
           }
-          d_ij = d_ij + psi_mat[r,s] * dpsi_rs(r, s, i, j)
+          d_ij = d_ij + psi_mat[r,s] * d1(r, s, i, j)
         }
       } # end loop over s
     } # end loop over r
@@ -178,56 +143,47 @@ dpsi = function(i, j) {
 
 
 ## compute the derivative: d psi_{rs} / d psi_{ij}
-dpsi_rs = function(r, s, i, j) {
+# dpsi_rs = function(r, s, i, j) {
+#
+#   ## if (r,s) \in V
+#   if (G[r, s] > 0) {
+#     if (r == i && s == j) { # d psi_{ij} / d psi_{ij} = 1
+#       return(1)
+#     } else {                # d psi_{rs} / d psi_{ij} = 0, since psi_rs is free
+#       return(0)
+#     }
+#   }
+#
+#
+#   if (i > r)                            { return(0) } # (i,j) comes after (r,s)
+#   if (i == r && j > s)                  { return(0) } # same row, but after
+#   if (i == r && j == s && G[r, s] > 0)  { return(1) } # redundant check?
+#   if (i == r && j == s && G[r, s] == 0) { return(0) } # deriv wrt to non-free: 0
+#
+#   if (r == 1 && s > r) { return(0) } # first row case has simplified formula
+#
+#   if (r > 1) { # derivative of psi_rs in 2nd row onward
+#
+#     tmp_sum = numeric(r - 1)
+#
+#     for (k in 1:(r - 1)) { # deriv taken wrt Eq. (31) in Atay
+#
+#       ## TODO: check values of psi_ks, psi_kr -- if 0, then can save calculation
+#       ##       on the derivative
+#
+#       tmp_sum[k] = dpsi_rs(k, r, i, j) * psi_mat[k, s] +
+#         dpsi_rs(k, s, i, j) * psi_mat[k, r]
+#     }
+#
+#     return(-1/psi_mat[r,r] * sum(tmp_sum)) ## expression derived from Eq. (99)
+#
+#   } else {
+#     print("case not accounted for")
+#     return(NA)
+#   }
+#
+# }
 
-  ## if (r,s) \in V
-  if (G[r, s] > 0) {
-    if (r == i && s == j) { # d psi_{ij} / d psi_{ij} = 1
-      return(1)
-    } else {                # d psi_{rs} / d psi_{ij} = 0, since psi_rs is free
-      return(0)
-    }
-  }
-
-
-  if (i > r)                            { return(0) } # (i,j) comes after (r,s)
-  if (i == r && j > s)                  { return(0) } # same row, but after
-  if (i == r && j == s && G[r, s] > 0)  { return(1) } # redundant check?
-  if (i == r && j == s && G[r, s] == 0) { return(0) } # deriv wrt to non-free: 0
-
-  if (r == 1 && s > r) { return(0) } # first row case has simplified formula
-
-  if (r > 1) { # derivative of psi_rs in 2nd row onward
-
-    tmp_sum = numeric(r - 1)
-
-    for (k in 1:(r - 1)) { # deriv taken wrt Eq. (31) in Atay
-
-      ## TODO: check values of psi_ks, psi_kr -- if 0, then can save calculation
-      ##       on the derivative
-
-      tmp_sum[k] = dpsi_rs(k, r, i, j) * psi_mat[k, s] +
-        dpsi_rs(k, s, i, j) * psi_mat[k, r]
-    }
-
-    return(-1/psi_mat[r,r] * sum(tmp_sum)) ## expression derived from Eq. (99)
-
-  } else {
-    print("case not accounted for")
-    return(NA)
-  }
-
-}
-
-
-
-
-grad_vec = function(u, params) {
-
-
-
-
-}
 
 
 

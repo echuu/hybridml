@@ -1,4 +1,5 @@
 
+
 source("examples/gwish/gwish_density.R")
 library(BDgraph)
 #### initialize graphs ---------------------------------------------------------
@@ -23,16 +24,16 @@ G_9 = matrix(c(1,1,0,0,1,0,0,0,0,
 a = c(1, 3, 2, 5, 4, 6, 7, 8, 9)
 G_9 = G_9[a, a]
 
-p = p1 + p2
-G = matrix(0, p, p)
-G[1:p1, 1:p1] = G_5
-G[(p1+1):p, (p1+1):p] = G_9
+# p = p1 + p2
+# G = matrix(0, p, p)
+# G[1:p1, 1:p1] = G_5
+# G[(p1+1):p, (p1+1):p] = G_9
 
 ## make massive graph
-n_decomp = 1
-# p2 = n_decomp * 9
-p = p1 + n_decomp * 9
-G_0 = diag(1, n_decomp) %x% G_9
+# n_decomp = 1
+# # p2 = n_decomp * 9
+# p = p1 + n_decomp * 9
+# G_0 = diag(1, n_decomp) %x% G_9
 
 n_G0 = 1
 n_G1 = 1
@@ -115,11 +116,26 @@ set.seed(1)
 Omega_G = rgwish(1, G, b, V) # generate the true precision matrix
 P = chol(solve(V)) # upper cholesky factor; D^(-1) = TT'  in Atay paper
 
-params = list(G = G, P = P, p = p, edgeInd = edgeInd,
-              b = b, nu_i = nu_i, b_i = b_i)
+# params = list(G = G, P = P, p = p, edgeInd = edgeInd,
+#               b = b, nu_i = nu_i, b_i = b_i)
 N = 0
 S = matrix(0, p, p)
 D = sum(edgeInd) # number of free parameters / dimension of parameter space
+
+index_mat = matrix(0, p, p)
+index_mat[upper.tri(index_mat, diag = T)][edgeInd] = 1:D
+index_mat[upper.tri(index_mat, diag = T)]
+t_ind = which(index_mat!=0,arr.ind = T)
+t_ind
+
+index_mat[lower.tri(index_mat)] = NA
+vbar = which(index_mat==0,arr.ind = T) # non-free elements
+n_nonfree = nrow(vbar)
+
+params = list(G = G, P = P, p = p, D = D, edgeInd = edgeInd,
+              b = b, nu_i = nu_i, b_i = b_i,
+              t_ind = t_ind, n_nonfree = n_nonfree, vbar = vbar)
+
 
 samps = samplegw(J, G, b, N, V, S, solve(P), FREE_PARAMS_ALL)
 u_samps = samps$Psi_free %>% data.frame
@@ -130,8 +146,14 @@ u_df %>% head
 grad = function(u, params) { pracma::grad(psi, u, params = params) }
 hess = function(u, params) { pracma::hessian(psi, u, params = params) }
 u_star = globalMode(u_df)
-# u_star
+u_star_numer = u_star
 
+grad = function(u, params) { f(u, params)  }
+hess = function(u, params) { ff(u, params) }
+u_star = globalMode(u_df)
+u_star_closed = u_star
+
+cbind(u_star_numer, u_star_closed)
 
 samps = samplegw(J, G, b, N, V, S, solve(P), FREE_PARAMS_ALL)
 u_samps = samps$Psi_free %>% data.frame
@@ -148,7 +170,7 @@ gnorm(G, b, V, J) # gnorm estimate of the entire (appended graph)
 log_density = function(u, data) {
   -psi(u, data)
 }
-J = 200
+J = 1000
 samps = samplegw(J, G, b, N, V, S, solve(P), FREE_PARAMS_ALL)
 u_samps = samps$Psi_free %>% data.frame
 u_samp = as.matrix(u_samps)
@@ -162,7 +184,7 @@ bridge_result = bridgesampling::bridge_sampler(samples = u_samp,
                                                log_posterior = log_density,
                                                data = params,
                                                lb = lb, ub = ub,
-                                               method = 'normal',
+                                               method = 'warp3',
                                                silent = TRUE)
 bridge_result$logml
 abs(Z - bridge_result$logml)
