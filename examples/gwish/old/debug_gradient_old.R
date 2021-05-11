@@ -17,7 +17,25 @@ n_G0 * 12 + n_G1 * 25
 ## find the indices to extract each block of the hessian that we will invert
 ## m will iterate over the blocks
 
+
+u_df %>% head
+u = u_df[1,1:D] %>% unlist %>% unname
+
+hess = function(u, params) { pracma::hessian(psi, u, params = params) }
+H_numer = hess(u, params)
+H_inv_numer = solve(H_numer)
+
+hess = function(u, params) { ff(u, params) }
+H = hess(u, params)
+
+H[1:12,13:D]
+H[13:D,1:12]
+
+solve(H)[1:12,13:D]
+solve(H)[13:D,1:12]
+
 stride = 12
+inv_list = vector("list", length = n_G0)
 for (m in 1:n_G0) {
 
   ii = (m-1) * stride + 1
@@ -25,7 +43,11 @@ for (m in 1:n_G0) {
   print(paste("r = ", ii, ", c = ", jj, sep = ''))
 
 
+  H_m = H_numer[ii:jj, ii:jj]
 
-
-
+  inv_list[[m]] = chol2inv(chol(H_m))
 }
+
+H_inv = matrix(as.matrix(Matrix::bdiag(inv_list)), D, D)
+
+all.equal(H_inv, H_inv_numer)

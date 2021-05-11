@@ -84,11 +84,10 @@ hybml = function(u_df, params, psi, grad, hess, u_0 = NULL, D = ncol(u_df) - 1) 
     return(list(logz = log_sum_exp(log_terms),
                 bounds = bounds,
                 G_k = G_k))
-
 }
 
 
-globalMode = function(u_df, tolerance = 0.00001, maxsteps = 200) {
+globalMode = function(u_df, params, tolerance = 0.00001, maxsteps = 200) {
 
     # use the MAP as the starting point for the algorithm
     MAP_LOC = which(u_df$psi_u == min(u_df$psi_u))

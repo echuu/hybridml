@@ -1,4 +1,14 @@
 
+## 5/10:
+## Split the calculation in to blocks, since each block of G_5 gives a very
+## easy calculation for both the gradient and the hessian.
+## This will require separate functions for both the gradient and the hessian
+## that are specific to this problem. In addition, we have to modify
+## globalMode() so that the correct params_G5 is passed into the grad and hess
+## functions, as well as hybridml(), so that the correct params_G5 is passed
+## into the grad and hess functions
+
+
 source("examples/gwish/gwish_density.R")
 library(BDgraph)
 #### initialize graphs ---------------------------------------------------------
@@ -50,7 +60,7 @@ params_G5 = list(G = G_5, P = P, p = p1, D = D, edgeInd = edgeInd,
 
 ### create parameters for stacked G_5's so we can sample, and compute psi ------
 
-n_G5 = 3 # number of G_5 graphs we want to stack
+n_G5 = 11 # number of G_5 graphs we want to stack
 G = diag(1, n_G5) %x% G_5
 p = ncol(G)
 V = n * diag(1, p)
@@ -95,8 +105,80 @@ params = list(G = G, P = P, p = p, D = D, edgeInd = edgeInd,
 
 samps = samplegw(J, G, b, N, V, S, solve(P), FREE_PARAMS_ALL)
 u_samps = samps$Psi_free %>% data.frame
+# u_df = preprocess(u_samps, D, params)     # J x (D_u + 1)
+# u_df %>% head
+
+I_G = function(delta) {
+  7/2 * log(pi) + lgamma(delta + 5/2) - lgamma(delta + 3) +
+    lgamma(delta + 1) + lgamma(delta + 3/2) + 2 * lgamma(delta + 2) +
+    lgamma(delta + 5/2)
+}
+(Z_5  = log(2^(0.5*p1*b + 7)) + I_G(0.5*(b-2)) + (-0.5 * p1 * b - 7) * log(n))
+Z = n_G5 * Z_5
+Z
+
+# ------------------------------------------------------------------------------
+
+
+grad = function(u, params) { pracma::grad(psi, u, params = params) }
+hess = function(u, params) { pracma::hessian(psi, u, params = params) }
+u_star = hybridml::globalMode(u_df) ## slow version
+u_star_numer = u_star
+
+grad = function(u, params) { fast_grad(u, params)  }
+hess = function(u, params) { fast_hess(u, params) }
+u_star = gwish_globalMode(u_df, params, params_G5)
+# u_star_closed = u_star
+
+# cbind(u_star_numer, u_star_closed)
+logzhat = hybml_gwish(u_df, params_G5, psi = psi, grad = grad, hess = hess, u_0 = u_star)$logz
+logzhat           # hybrid
+Z                 # truth
+
+
+J = 1000
+samps = samplegw(J, G, b, N, V, S, solve(P), FREE_PARAMS_ALL)
+u_samps = samps$Psi_free %>% data.frame
 u_df = preprocess(u_samps, D, params)     # J x (D_u + 1)
-u_df %>% head
+logzhat = hybml_gwish(u_df, params_G5, psi = psi, grad = grad, hess = hess, u_0 = u_star)$logz
+logzhat           # hybrid
+
+
+## bridge calculation
+log_density = function(u, data) {
+  -psi(u, data)
+}
+u_samp = as.matrix(u_samps)
+colnames(u_samp) = names(u_df)[1:D]
+# prepare bridge_sampler input()
+lb = rep(-Inf, D)
+ub = rep(Inf, D)
+names(lb) <- names(ub) <- colnames(u_samp)
+
+bridge_result = bridgesampling::bridge_sampler(samples = u_samp,
+                                               log_posterior = log_density,
+                                               data = params,
+                                               lb = lb, ub = ub,
+                                               method = 'normal',
+                                               silent = TRUE)
+bridge_result$logml
+
+gnorm(G, b, V, J) # gnorm estimate of the entire (appended graph)
+abs(gnorm(G, b, V, J) - Z)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
