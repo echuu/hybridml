@@ -27,7 +27,9 @@ b = 100
 n = 100
 V_5 = n * diag(1, p1)
 
-FREE_PARAMS_ALL = c(upper.tri(diag(1, p), diag = T) & G_5)
+P = chol(solve(V_5)) # upper cholesky factor; D^(-1) = TT'  in Atay paper
+
+FREE_PARAMS_ALL = c(upper.tri(diag(1, p1), diag = T) & G_5)
 edgeInd = G_5[upper.tri(G_5, diag = TRUE)] %>% as.logical
 
 ## construct A matrix so that we can compute k_i
@@ -60,7 +62,7 @@ params_G5 = list(G = G_5, P = P, p = p1, D = D, edgeInd = edgeInd,
 
 ### create parameters for stacked G_5's so we can sample, and compute psi ------
 
-n_G5 = 11 # number of G_5 graphs we want to stack
+n_G5 = 3 # number of G_5 graphs we want to stack
 G = diag(1, n_G5) %x% G_5
 p = ncol(G)
 V = n * diag(1, p)
@@ -102,11 +104,11 @@ params = list(G = G, P = P, p = p, D = D, edgeInd = edgeInd,
               b = b, nu_i = nu_i, b_i = b_i,
               t_ind = t_ind, n_nonfree = n_nonfree, vbar = vbar)
 
-
+J = 200
 samps = samplegw(J, G, b, N, V, S, solve(P), FREE_PARAMS_ALL)
 u_samps = samps$Psi_free %>% data.frame
-# u_df = preprocess(u_samps, D, params)     # J x (D_u + 1)
-# u_df %>% head
+u_df = preprocess(u_samps, D, params)     # J x (D_u + 1)
+u_df %>% head
 
 I_G = function(delta) {
   7/2 * log(pi) + lgamma(delta + 5/2) - lgamma(delta + 3) +
@@ -128,6 +130,7 @@ u_star_numer = u_star
 grad = function(u, params) { fast_grad(u, params)  }
 hess = function(u, params) { fast_hess(u, params) }
 u_star = gwish_globalMode(u_df, params, params_G5)
+u_star
 # u_star_closed = u_star
 
 # cbind(u_star_numer, u_star_closed)
@@ -165,7 +168,8 @@ bridge_result$logml
 
 gnorm(G, b, V, J) # gnorm estimate of the entire (appended graph)
 abs(gnorm(G, b, V, J) - Z)
-
+abs(bridge_result$logml - Z)
+abs(logzhat - Z)
 
 
 
