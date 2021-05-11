@@ -121,7 +121,12 @@ Z
 
 # ------------------------------------------------------------------------------
 
+#### compute the hybrid approximation, bridge sampling estimator
 
+
+## numerical versions of the grad and hess -- included here just as a comparison
+## for smaller dimension to make sure the analytical gradient and hessian
+## are computed correctly
 grad = function(u, params) { pracma::grad(psi, u, params = params) }
 hess = function(u, params) { pracma::hessian(psi, u, params = params) }
 u_star = hybridml::globalMode(u_df) ## slow version

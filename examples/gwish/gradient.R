@@ -1,5 +1,9 @@
 
 
+#### 5/10: this is the final form of the gwish() gradient -- f()
+#### load this entire file before computing any hybrid estimates
+#### note: these functions are called on block matrices by the fast_grad()
+#### function in gwish_calc.R
 
 # u_df %>% head
 # u = u_df[1,1:D] %>% unlist %>% unname

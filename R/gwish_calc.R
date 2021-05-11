@@ -1,41 +1,34 @@
 
-#### true ML calculation
-I_G = function(delta) {
-  7/2 * log(pi) + lgamma(delta + 5/2) - lgamma(delta + 3) +
-    lgamma(delta + 1) + lgamma(delta + 3/2) + 2 * lgamma(delta + 2) +
-    lgamma(delta + 5/2)
-}
-(Z_5  = log(2^(0.5*p1*b + 7)) + I_G(0.5*(b-2)) + (-0.5 * p1 * b - 7) * log(n))
 
-
-J = 200
-gnorm(G, b, V, J) # gnorm estimate of the entire (appended graph)
-(Z = n_G5 * Z_5)
+#### 5/10: This file contains the adapted, example-specific code to calculate
+#### the hybrid approximation for the gwish() model
 
 
 
-grad = function(u, params) { f(u, params)  }
-hess = function(u, params) { fast_hess(u, params) }
-u_star = globalMode(u_df, params_G5, params)
-samps = samplegw(J, G, b, N, V, S, solve(P), FREE_PARAMS_ALL)
-u_samps = samps$Psi_free %>% data.frame
-u_df = preprocess(u_samps, D, params)     # J x (D_u + 1)
-logzhat = hybridml::hybml(u_df, params, psi = psi, grad = grad, hess = hess, u_0 = u_star)$logz
-logzhat           # hybrid
-Z                 # truth
-
-####
-
-# compute the hessian block by block
-
-u_df %>% head
-u = u_df[1,1:D] %>% unlist %>% unname
-u
+#### uncomment next few lines to test the fast_hess(), fast_grad() function
+#### on an individual data point
+# u_df %>% head
+# u = u_df[1,1:D] %>% unlist %>% unname
+# u
 
 
 
-## TODO: also need to update hybridml that takes params_G5 as an input as well
-## because params$D != params_G5$D
+
+#### Functions below are specific to the gwish() problem and must be loaded
+#### before attempting any sort of hybrid approximation. Also, gradient.R and
+#### hessian.R contain the bulk of the implmentation for the wrapper functions
+#### that are called below.
+
+
+#### functions include:
+#### (1) hybml_gwish()
+#### (2) gwish_globalMode()
+#### (3) fast_hess()
+#### (4) fast_grad()
+
+#### ---------------------------------------------------------------------------
+
+
 hybml_gwish = function(u_df, params, psi, grad, hess, u_0 = NULL, D = ncol(u_df) - 1) {
 
   options(scipen = 999)
@@ -220,32 +213,32 @@ fast_hess = function(u, params_G5) {
 }
 
 
-create_psi_mat(u, params)
-stride = params_G5$D # dimension of parameter in the 1 graph example
-block = 1 # index for which graph we are on
-hess_list = vector("list", length = n_G5)
-inv_hess_list  = vector("list", length = n_G5)
-for (n in 1:n_G5) {
-
-  # extract the first (p1 x p1) block out psi_mat
-  start = (block-1) * stride + 1
-  end   = block * stride
-  u_n = u[start:end]
-  # psi_mat_n = create_psi_mat(u_n, params_G5)
-  # print(psi_mat_n)
-  block = block + 1
-
-  hess_list[[n]]     = ff_fast(u_n, params_G5)
-  inv_hess_list[[n]] = solve(hess_list[[n]])
-}
-
-# return these
-H      = matrix(Matrix::bdiag(hess_list), D, D)
-H_inv  = matrix(Matrix::bdiag(inv_hess_list), D, D)
-
-big_hess      = ff_fast(u, params)
-big_hess_inv  = solve(big_hess)
-
-all.equal(H, big_hess)
-all.equal(H_inv, big_hess_inv)
+# create_psi_mat(u, params)
+# stride = params_G5$D # dimension of parameter in the 1 graph example
+# block = 1 # index for which graph we are on
+# hess_list = vector("list", length = n_G5)
+# inv_hess_list  = vector("list", length = n_G5)
+# for (n in 1:n_G5) {
+#
+#   # extract the first (p1 x p1) block out psi_mat
+#   start = (block-1) * stride + 1
+#   end   = block * stride
+#   u_n = u[start:end]
+#   # psi_mat_n = create_psi_mat(u_n, params_G5)
+#   # print(psi_mat_n)
+#   block = block + 1
+#
+#   hess_list[[n]]     = ff_fast(u_n, params_G5)
+#   inv_hess_list[[n]] = solve(hess_list[[n]])
+# }
+#
+# # return these
+# H      = matrix(Matrix::bdiag(hess_list), D, D)
+# H_inv  = matrix(Matrix::bdiag(inv_hess_list), D, D)
+#
+# big_hess      = ff_fast(u, params)
+# big_hess_inv  = solve(big_hess)
+#
+# all.equal(H, big_hess)
+# all.equal(H_inv, big_hess_inv)
 

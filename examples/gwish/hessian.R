@@ -1,4 +1,9 @@
 
+#### 5/10: this is the final form of the gwish hessian -- ff_fast()
+#### load this entire file before computing any hybrid estimates
+#### note: these functions are called on block matrices by the fast_hess()
+#### function in gwish_calc.R
+
 
 # index_mat = matrix(0, p, p)
 # index_mat[upper.tri(index_mat, diag = T)][edgeInd] = 1:D
@@ -25,29 +30,27 @@
 
 
 
-testblock = matrix(0, 6, 6)
-D = ncol(testblock)
-stride = 2
-block = 1
-for (r in 1:(D-1)) {
-
-  for (c in (r+1):D) {
-    if (c <= (block * stride)) {
-      testblock[r,c] = NA
-      testblock[c,r] = NA
-    } else {
-      break
-    }
-  }
-
-  if ((r %% stride) == 0) {
-    block = block + 1
-  }
-
-}
-testblock
-
-
+# testblock = matrix(0, 6, 6)
+# D = ncol(testblock)
+# stride = 2
+# block = 1
+# for (r in 1:(D-1)) {
+#
+#   for (c in (r+1):D) {
+#     if (c <= (block * stride)) {
+#       testblock[r,c] = NA
+#       testblock[c,r] = NA
+#     } else {
+#       break
+#     }
+#   }
+#
+#   if ((r %% stride) == 0) {
+#     block = block + 1
+#   }
+#
+# }
+# testblock
 
 ff_fast = function(u, params) {
 
