@@ -156,7 +156,7 @@ HIW_logprior = function(u, params) {
     # in each row of Lt - 1
     # recall: the i-th row of Lt has exactly nu_i + 1 nonzero entries
     nu = rowSums(Lt != 0) - 1
-    nu[D] = 0
+    # nu[D] = 0
 
     #### (4) compute upper diagonal part of log prior
     upper_diag_prior = sum(- 0.5 * log(2 * pi) - 0.5 * u_upper^2)
@@ -177,9 +177,8 @@ HIW_logprior = function(u, params) {
 
 
 
-
 ## psi() function  -------------------------------------------------------------
-psi = function(u, params) {
+old_psi = function(u, params) {
 
     loglik = HIW_loglik(u, params)
     logprior = HIW_logprior(u, params)
@@ -188,6 +187,30 @@ psi = function(u, params) {
     return(- loglik - logprior)
 
 } # end of psi() function ------------------------------------------------------
+
+
+
+preprocess = function(post_samps, D, params) {
+
+    psi_u = apply(post_samps, 1, old_psi, params = params) %>% unname() # (J x 1)
+
+    # (1.2) name columns so that values can be extracted by partition.R
+    u_df_names = character(D + 1)
+    for (d in 1:D) {
+        u_df_names[d] = paste("u", d, sep = '')
+    }
+    u_df_names[D + 1] = "psi_u"
+
+    # populate u_df
+    u_df = cbind(post_samps, psi_u) # J x (D + 1)
+    names(u_df) = u_df_names
+
+
+    return(u_df)
+
+} # end of preprocess() function -----------------------------------------------
+
+
 
 
 
@@ -225,7 +248,9 @@ logHIWnorm = function(G, b, D){
     if(ns>1){
         for(i in 2:ns){
             ind = separators[[i]]
-            Snorm = Snorm + logfrac(length(ind), b, D[ind, ind, drop = FALSE])
+            if (length(ind) != 0) {
+                Snorm = Snorm + logfrac(length(ind), b, D[ind, ind, drop = FALSE])
+            }
         }
     }
 
@@ -290,7 +315,9 @@ logHIW = function(G, b, D, Sigma){
 }
 
 
-# Sample the HIW_G(bG,DG) distribution on a graph G with adjacency matrix Adj
+
+
+
 HIWsim = function(Adj, bG, DG){
     # check if "Adj" is a matrix object
     if(is.matrix(Adj)==FALSE) { stop("Adj must be a matrix object!") }
@@ -327,14 +354,27 @@ HIWsim = function(Adj, bG, DG){
 
     for(i in 2:numberofcliques){
         sid = Separators[[i]]
-        DSi[[i]] = solve(DG[sid, sid])
-        cid = Cliques[[i]]
-        dif = sort(setdiff(cid, UN))
-        UN = sort(union(cid, UN)) # no need to sort, just playing safe
-        sizedif = length(dif)
-        DRS[[i]] = DG[dif, dif] - DG[dif, sid] %*% DSi[[i]] %*% DG[sid, dif]
-        DRS[[i]] = ( DRS[[i]] + t(DRS[[i]]) )/2
-        mU[[i]] = DG[dif, sid] %*% DSi[[i]]
+        if(length(sid)==0){
+            DSi[[i]] = integer(0)
+            cid = Cliques[[i]]
+            dif = sort(setdiff(cid, UN))
+            UN = sort(union(cid, UN)) # no need to sort, just playing safe
+            sizedif = length(dif)
+            DRS[[i]] = DG[dif, dif]
+            DRS[[i]] = ( DRS[[i]] + t(DRS[[i]]) )/2
+            mU[[i]] = integer(0)
+        }
+        else{
+            DSi[[i]] = solve(DG[sid, sid])
+            cid = Cliques[[i]]
+            dif = sort(setdiff(cid, UN))
+            UN = sort(union(cid, UN)) # no need to sort, just playing safe
+            sizedif = length(dif)
+            DRS[[i]] = DG[dif, dif] - DG[dif, sid] %*% DSi[[i]] %*% DG[sid, dif]
+            DRS[[i]] = ( DRS[[i]] + t(DRS[[i]]) )/2
+            mU[[i]] = DG[dif, sid] %*% DSi[[i]]
+        }
+
     }
 
     ############################################################
@@ -349,11 +389,17 @@ HIWsim = function(Adj, bG, DG){
         UN = sort(union(Cliques[[i]], UN)) # probably no need to sort, just playing safe
         sizedif = length(dif)
         sid = Separators[[i]]
-        SigRS = solve(Wishart_InvA_RNG( bG+length(Cliques[[i]])-1, DRS[[i]] ))
-        Ui = rMNorm( as.vector(t(mU[[i]])), kronecker(SigRS, DSi[[i]]))
-        Sigmaj[dif, sid] = t(matrix(Ui, ncol = sizedif)) %*% Sigmaj[sid, sid]
-        Sigmaj[sid, dif] = t(Sigmaj[dif, sid])
-        Sigmaj[dif, dif] = SigRS + Sigmaj[dif, sid] %*% solve(Sigmaj[sid, sid]) %*% Sigmaj[sid, dif]
+        if(length(sid)==0){
+            SigRS = solve(Wishart_InvA_RNG( bG+length(Cliques[[i]])-1, DRS[[i]] ))
+            Sigmaj[dif, dif] = SigRS
+        }
+        else{
+            SigRS = solve(Wishart_InvA_RNG( bG+length(Cliques[[i]])-1, DRS[[i]] ))
+            Ui = rMNorm( as.vector(t(mU[[i]])), kronecker(SigRS, DSi[[i]]))
+            Sigmaj[dif, sid] = t(matrix(Ui, ncol = sizedif)) %*% Sigmaj[sid, sid]
+            Sigmaj[sid, dif] = t(Sigmaj[dif, sid])
+            Sigmaj[dif, dif] = SigRS + Sigmaj[dif, sid] %*% solve(Sigmaj[sid, sid]) %*% Sigmaj[sid, dif]
+        }
     }
 
     # Next, completion operation for sampled variance matrix
@@ -361,10 +407,18 @@ HIWsim = function(Adj, bG, DG){
     for(i in 2:numberofcliques){
         dif = sort(setdiff(Cliques[[i]], H))
         sid = Separators[[i]]
-        h = sort(setdiff(H, sid))
-        Sigmaj[dif, h] = Sigmaj[dif, sid] %*% solve(Sigmaj[sid, sid]) %*% Sigmaj[sid, h]
-        Sigmaj[h, dif] = t(Sigmaj[dif, h])
-        H = sort(union(H, Cliques[[i]])) # probably no need to sort, just playing safe
+        if(length(sid)==0){
+            h = sort(setdiff(H, sid))
+            Sigmaj[dif, h] = 0
+            Sigmaj[h, dif] = t(Sigmaj[dif, h])
+            H = sort(union(H, Cliques[[i]])) # probably no need to sort, just playing safe
+        }
+        else{
+            h = sort(setdiff(H, sid))
+            Sigmaj[dif, h] = Sigmaj[dif, sid] %*% solve(Sigmaj[sid, sid]) %*% Sigmaj[sid, h]
+            Sigmaj[h, dif] = t(Sigmaj[dif, h])
+            H = sort(union(H, Cliques[[i]])) # probably no need to sort, just playing safe
+        }
     }
     Sigma = Sigmaj
 
@@ -376,12 +430,110 @@ HIWsim = function(Adj, bG, DG){
         cid = Cliques[[i]]
         Caux[cid, cid, i] = solve(Sigmaj[cid, cid])
         sid = Separators[[i]]
-        Saux[sid, sid, i] = solve(Sigmaj[sid, sid])
+        if(length(sid)!=0){
+            Saux[sid, sid, i] = solve(Sigmaj[sid, sid])
+        }
     }
     Omega = rowSums(Caux, dims = 2) - rowSums(Saux, dims = 2)
 
     return(list(Sigma = Sigma, Omega = Omega))
 }
+
+
+
+
+# Sample the HIW_G(bG,DG) distribution on a graph G with adjacency matrix Adj
+# HIWsim = function(Adj, bG, DG){
+#     # check if "Adj" is a matrix object
+#     if(is.matrix(Adj)==FALSE) { stop("Adj must be a matrix object!") }
+#     # check if "Adj" is a square matrix
+#     if(dim(Adj)[1]!=dim(Adj)[2]) { stop("Adj must be a square matrix") }
+#     # check if "Adj" is symmetric
+#     if(isSymmetric.matrix(Adj)==FALSE) { stop("Adj must be a symmetric matrix") }
+#
+#     # check if "DG" is a matrix object
+#     if(is.matrix(DG)==FALSE) { stop("DG must be a matrix object!") }
+#     # check if "DG" is a square matrix
+#     if(dim(DG)[1]!=dim(DG)[2]) { stop("DG must be a square matrix") }
+#     # check if "DG" is symmetric
+#     if(isSymmetric.matrix(DG)==FALSE) { stop("DG must be a symmetric matrix") }
+#
+#     # check if "bG" is greater than 2
+#     if(bG<=2) { stop("bG must be greater than 2") }
+#     # check if "Adj" and "DG" are the same size
+#     if(nrow(Adj)!=nrow(DG)) { stop("Adj and DG must have the same dimension") }
+#     rMNorm = function(m, V){ return(m+t(chol(V))%*%rnorm(length(m))) }
+#
+#     p = nrow(Adj)
+#     temp = makedecompgraph(Adj)
+#     Cliques = temp$C
+#     Separators = temp$S
+#     numberofcliques = length(Cliques)
+#
+#     ############################################################
+#     # Creat some working arrays that are computed only once
+#     C1 = solve(DG[Cliques[[1]], Cliques[[1]]]/bG)
+#     c1 = Cliques[[1]]
+#     UN = c1
+#     DSi = DRS = mU = list()
+#
+#     for(i in 2:numberofcliques){
+#         sid = Separators[[i]]
+#         DSi[[i]] = solve(DG[sid, sid])
+#         cid = Cliques[[i]]
+#         dif = sort(setdiff(cid, UN))
+#         UN = sort(union(cid, UN)) # no need to sort, just playing safe
+#         sizedif = length(dif)
+#         DRS[[i]] = DG[dif, dif] - DG[dif, sid] %*% DSi[[i]] %*% DG[sid, dif]
+#         DRS[[i]] = ( DRS[[i]] + t(DRS[[i]]) )/2
+#         mU[[i]] = DG[dif, sid] %*% DSi[[i]]
+#     }
+#
+#     ############################################################
+#     # MC Sampling
+#     UN = c1
+#     Sigmaj = matrix(0, p, p)
+#     # sample variance mx on first component
+#     Sigmaj[c1, c1] = solve(Wishart_InvA_RNG( bG+length(Cliques[[1]])-1, DG[Cliques[[1]], Cliques[[1]]] ))
+#
+#     for(i in 2:numberofcliques){ # visit components and separators in turn
+#         dif = sort(setdiff(Cliques[[i]], UN))
+#         UN = sort(union(Cliques[[i]], UN)) # probably no need to sort, just playing safe
+#         sizedif = length(dif)
+#         sid = Separators[[i]]
+#         SigRS = solve(Wishart_InvA_RNG( bG+length(Cliques[[i]])-1, DRS[[i]] ))
+#         Ui = rMNorm( as.vector(t(mU[[i]])), kronecker(SigRS, DSi[[i]]))
+#         Sigmaj[dif, sid] = t(matrix(Ui, ncol = sizedif)) %*% Sigmaj[sid, sid]
+#         Sigmaj[sid, dif] = t(Sigmaj[dif, sid])
+#         Sigmaj[dif, dif] = SigRS + Sigmaj[dif, sid] %*% solve(Sigmaj[sid, sid]) %*% Sigmaj[sid, dif]
+#     }
+#
+#     # Next, completion operation for sampled variance matrix
+#     H = c1
+#     for(i in 2:numberofcliques){
+#         dif = sort(setdiff(Cliques[[i]], H))
+#         sid = Separators[[i]]
+#         h = sort(setdiff(H, sid))
+#         Sigmaj[dif, h] = Sigmaj[dif, sid] %*% solve(Sigmaj[sid, sid]) %*% Sigmaj[sid, h]
+#         Sigmaj[h, dif] = t(Sigmaj[dif, h])
+#         H = sort(union(H, Cliques[[i]])) # probably no need to sort, just playing safe
+#     }
+#     Sigma = Sigmaj
+#
+#     # Next, computing the corresponding sampled precision matrix
+#     Caux = Saux = array(0, c(p, p, numberofcliques))
+#     cid = Cliques[[1]]
+#     Caux[cid, cid, 1] = solve(Sigmaj[cid, cid])
+#     for(i in 2:numberofcliques){
+#         cid = Cliques[[i]]
+#         Caux[cid, cid, i] = solve(Sigmaj[cid, cid])
+#         sid = Separators[[i]]
+#         Saux[sid, sid, i] = solve(Sigmaj[sid, sid])
+#     }
+#     Omega = rowSums(Caux, dims = 2) - rowSums(Saux, dims = 2)
+#
+#     return(list(Sigma = Sigma, Omega = Omega))
+# }
 
 
 # Input:  an adjacency  matrix A of a decomposable graph G

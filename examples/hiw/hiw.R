@@ -1,6 +1,8 @@
 
-
+library(dplyr)
 source("examples/hiw/hiw_helper.R")
+Rcpp::sourceCpp("C:/Users/ericc/mlike_approx/speedup/hiw.cpp")
+
 library(dplyr)
 testG  = matrix(c(1,1,0,0,0,
                   1,1,1,1,1,
@@ -54,26 +56,144 @@ for (i in 1:N) {
 
 S = t(Y) %*% Y
 
+nu = rowSums(chol(Omega_G) != 0) - 1
+xi = b + nu - 1
+t_ind = which(chol(Omega_G) != 0, arr.ind = T)
+
+
 params = list(N = N, D = D, D_0 = D_0, D_u = D_u,
               testG = testG, edgeInd = edgeInd,
-              upperInd = upperInd, S = S, V = V, b = b)
+              upperInd = upperInd, S = S, V = V, b = b,
+              nu = nu, xi = xi, G = G, t_ind = t_ind)
 
-J = 5000
+J = 1000
 postIW = sampleHIW(J, D_u, D_0, testG, b, N, V, S, edgeInd)
 post_samps = postIW$post_samps                 # (J x D_u)
-
 u_df = hybridml::preprocess(post_samps, D_u, params)     # J x (D_u + 1)
-
 (LIL = logmarginal(Y, testG, b, V, S))
 
-lambda = function(u, params) { pracma::grad(psi, u, params = params) }
-hess   = function(u, params) { pracma::hessian(psi, u, params = params) }
+# slow_grad = function(u, params) { pracma::grad(old_psi, u, params = params) }
+# slow_hess = function(u, params) { pracma::hessian(old_psi, u, params = params) }
 
-out = hybridml::hybml(u_df, params, grad = lambda, hess = hess)
+u_star = globalMode(u_df, params)
+out = hybridml::hybml(u_df, params, grad = grad, hess = hess, u_0 = u_star)
+out = hybridml::hybml(u_df, params, grad = fast_grad, hess = fast_hess, u_0 = u_star)
 out$logz
 
 (LIL = logmarginal(Y, testG, b, V, S))
 
 - 0.5 * D * N * log(2 * pi) + BDgraph::gnorm(testG, b + N, V + S, iter = 1000) -
   BDgraph::gnorm(testG, b, V, iter = 1000)
+
+library(bridgesampling)
+log_density = function(u, data) {
+  -psi(u, data)
+}
+
+
+n_sims = 100
+hyb = numeric(n_sims)
+hyb_old = numeric(n_sims)
+gnorm_approx = numeric(n_sims)
+bridge = numeric(n_sims)
+bridge_warp  = numeric(n_sims)
+
+j = 1
+set.seed(1)
+truth = LIL
+while (j <= n_sims) {
+
+  postIW = sampleHIW(J, D_u, D_0, testG, b, N, V, S, edgeInd)
+  post_samps = postIW$post_samps                 # (J x D_u)
+  u_df = hybridml::preprocess(post_samps, D_u, params)     # J x (D_u + 1)
+
+  hyb[j] = hybridml::hybml(u_df, params, grad = grad, hess = hess, u_0 = u_star)$logz
+  hyb_old[j] = hybridml::hybml_const(u_df)$logz
+
+  ### bridge estimator ---------------------------------------------------------
+  u_samp = as.matrix(post_samps)
+  colnames(u_samp) = names(u_df)[1:D_u]
+  # prepare bridge_sampler input()
+  lb = rep(-Inf, D_u)
+  ub = rep(Inf, D_u)
+  names(lb) <- names(ub) <- colnames(u_samp)
+
+  bridge_result = bridgesampling::bridge_sampler(samples = u_samp,
+                                                 log_posterior = log_density,
+                                                 data = params,
+                                                 lb = lb, ub = ub,
+                                                 silent = TRUE)
+
+  bridge[j] = bridge_result$logml
+
+  bridge_result = bridgesampling::bridge_sampler(samples = u_samp,
+                                                 log_posterior = log_density,
+                                                 data = params,
+                                                 lb = lb, ub = ub,
+                                                 method = 'warp3',
+                                                 silent = TRUE)
+  bridge_warp[j] = bridge_result$logml
+  ### bridge estimator ---------------------------------------------------------
+
+  gnorm_approx[j] = - 0.5 * D * N * log(2 * pi) +
+    BDgraph::gnorm(testG, b + N, V + S, iter = J/2) -
+    BDgraph::gnorm(testG, b, V, iter = J/2)
+
+
+  if (j %% 5 == 0) {
+    print(paste('iter ', j, ': ', ' hyb: ',
+                round(mean(hyb[hyb!=0]), 3),
+                ' (error = ',
+                round(mean(abs(truth - hyb[hyb!=0])), 3), ')',
+                sep = ''))
+  }
+
+  # print(paste('iter ', j, ': ', ' hyb: ',
+  #             round(mean(hyb[hyb!=0]), 3),
+  #             ' (error = ',
+  #             round(mean(abs(truth - hyb[hyb!=0])), 3), ')',
+  #             sep = ''))
+  #
+  # print(paste('iter ', j, ': ', ' bdg: ',
+  #             round(mean(bridge[bridge!=0]), 3),
+  #             ' (error = ',
+  #             round(mean(abs(truth - bridge[bridge!=0])), 3), ')',
+  #             sep = ''))
+  #
+  # print(paste('iter ', j, ': ', ' gnm: ',
+  #             round(mean(gnorm_approx[gnorm_approx!=0]), 3),
+  #             ' (error = ',
+  #             round(mean(truth - gnorm_approx[gnorm_approx!=0]), 3),
+  #             ')', sep = ''))
+
+  j = j + 1
+}
+
+
+
+approx = data.frame(truth, hyb = hyb, gnorm = gnorm_approx, bridge = bridge,
+                    bridge_warp = bridge_warp)
+approx_long = reshape2::melt(approx, id.vars = 'truth')
+
+res_tbl =
+  data.frame(logz      = colMeans(approx),
+             approx_sd = apply(approx, 2, sd),
+             avg_error = colMeans(truth - approx),            # avg error
+             mae       = colMeans(abs(truth - approx)),       # mean absolute error
+             rmse      = sqrt(colMeans((truth - approx)^2)))  # root mean square error
+
+t(round(res_tbl, 4)[,-c(2,4)])[,c(1,4,5,3,2)]
+
+## truth compared to:
+  ## bridge, warped bridge
+  ## hybep, hyb
+  ## gnorm
+  ## moulines?
+
+
+
+
+
+
+
 

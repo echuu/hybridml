@@ -87,10 +87,10 @@ hybml = function(u_df, params, psi, grad, hess, u_0 = NULL, D = ncol(u_df) - 1) 
 }
 
 
-globalMode = function(u_df, params, tolerance = 0.00001, maxsteps = 200) {
+globalMode = function(u_df, params, D = ncol(u_df) - 1, tolerance = 0.00001, maxsteps = 200) {
 
     # use the MAP as the starting point for the algorithm
-    MAP_LOC = which(u_df$psi_u == min(u_df$psi_u))
+    MAP_LOC = which(u_df$psi_u == min(u_df$psi_u))[1]
     theta = u_df[MAP_LOC,1:D] %>% unname() %>% unlist()
 
     numsteps = 0
