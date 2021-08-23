@@ -129,22 +129,42 @@ init_stacked_graph = function(G_in, b, n, V, n_graphs) {
 }
 
 
+source("examples/gwish/gwish_density.R")
+library(BDgraph)
+library(dplyr)
+
+grad = function(u, params) { fast_grad(u, params) }
+hess = function(u, params) { fast_hess(u, params) }
+
+G_5 = matrix(c(1,1,0,1,1,
+               1,1,1,0,0,
+               0,1,1,1,1,
+               1,0,1,1,1,
+               1,0,1,1,1), 5, 5)
+
 G = G_5
-n = 3
+n = 10
 V = diag(1, ncol(G_5))
 b = 5
-J = 2000
+J = 200
 p = ncol(G_5)
 
-G5_obj = init_graph(G = G_5, b = 5, n = 3, V = diag(1, ncol(G_5)))
+G5_obj = init_graph(G = G_5, b = 5, n = n, V = diag(1, ncol(G_5)))
 
+I_G = function(delta) {
+  7/2 * log(pi) + lgamma(delta + 5/2) - lgamma(delta + 3) +
+    lgamma(delta + 1) + lgamma(delta + 3/2) + 2 * lgamma(delta + 2) +
+    lgamma(delta + 5/2)
+}
 (Z_5  = log(2^(0.5*p*b + 7)) + I_G(0.5*(b-2)) + (-0.5 * p * b - 7) * log(n))
-
+Z = G5_obj$n_graphs * Z_5
 
 G5_obj$vbar
 G5_obj$G
 G5_obj$n_graphs
 
+set.seed(1)
+J = 5000
 samps = samplegw(J, G5_obj$G, G5_obj$b, 0, G5_obj$V_n, G5_obj$S, solve(G5_obj$P),
                  G5_obj$FREE_PARAMS_ALL)
 
@@ -156,9 +176,9 @@ u_star = gwish_globalMode(u_df, G5_obj, G5_obj)
 logzhat = hybml_gwish(u_df, G5_obj,
                       psi = psi, grad = grad, hess = hess,
                       u_0 = u_star)$logz
-logzhat
-
-gnorm(G, b, n * V, J) # gnorm estimate of the entire (appended graph)
+logzhat # -22.72094
+gnorm(G, b, n * V, J) # -22.8673
+Z # -22.86793
 
 
 

@@ -1,9 +1,13 @@
 
 
+#### 8/23:
+#### TODO: documentation for this file needs to be updated, need to maybe review
+####       some of these functions (analytically) and begin porting these
+####       calculations to C++ for some speedup
+
+
 #### 5/10: This file contains the adapted, example-specific code to calculate
 #### the hybrid approximation for the gwish() model
-
-
 
 #### uncomment next few lines to test the fast_hess(), fast_grad() function
 #### on an individual data point
@@ -11,11 +15,6 @@
 ### u = u_df[1,1:D] %>% unlist %>% unname
 ### u
 ### psi(u, params)
-
-
-
-
-
 
 
 #### Functions below are specific to the gwish() problem and must be loaded
@@ -273,6 +272,593 @@ gwish_preprocess = function(post_samps, D, params) {
 
   return(u_df)
 }
+
+
+
+#### ---------------------------------------------------------------------------
+
+
+#### gradient related functions
+
+
+
+#### 5/10: this is the final form of the gwish() gradient -- f()
+#### load this entire file before computing any hybrid estimates
+#### note: these functions are called on block matrices by the fast_grad()
+#### function in gwish_calc.R
+
+# u_df %>% head
+# u = u_df[1,1:D] %>% unlist %>% unname
+
+# psi_mat = create_psi_mat(u, params)
+# psi_mat
+#
+# f(u, params)
+# grad(u, params)
+#
+# f(u, params)
+# grad(u, params)
+
+f = function(u, params) {
+
+  G = params$G
+  p = params$p
+  edgeInd = params$edgeInd
+  psi_mat = create_psi_mat(u, params)
+
+  # obj = list(G = G, p = p, psi_mat = psi_mat)
+  gg = matrix(0, p, p)
+  for (i in 1:p) {
+    for (j in i:p) {
+      if (G[i,j] != 0) { ## dpsi / dpsi_ij
+        gg[i,j] = dpsi(i, j, psi_mat, params)
+      }
+    }
+  }
+
+  return(gg[upper.tri(gg, diag = TRUE)][edgeInd])
+}
+
+dpsi = function(i, j, psi_mat, params) {
+
+  G = params$G
+  p = params$p
+  # psi_mat = obj$psi_mat
+
+  if (G[i,j] == 0) { ## need this check even though it's in the main fcn b/c
+    return(0)        ## we may eventually run into non-free elements
+  }
+  if (i == j) {
+
+    d_ij = 0
+    ### summation over non-free elements
+    for (r in 1:p) {
+      for (s in r:p) {
+        if (G[r,s] == 0) {
+          # print(paste('r = ', r, ', ', 's = ', s, ', ',
+          #             'i = ', i, ', ', 'j = ', j, sep = ''))
+          ## if psi_rs == 0, then no need to compute the derivative
+          if (psi_mat[r, s] == 0) {
+            # print("skipping derivative calculation")
+            next
+          }
+          d_ij = d_ij + psi_mat[r,s] * d1(r, s, i, j, psi_mat, G)
+        }
+      }
+    }
+
+    return(d_ij - (params$b + params$nu_i[i] - 1) / psi_mat[i,i] + psi_mat[i,i])
+  } else {
+    d_ij = 0
+    ## iterate through each entry (r,s) and compute d psi_rs / d psi_ij
+    for (r in 1:p) {
+      for (s in r:p) {
+        if (G[r,s] == 0) {
+          # print(paste('r = ', r, ', ', 's = ', s, ', ',
+          #             'i = ', i, ', ', 'j = ', j, sep = ''))
+          ## if psi_rs == 0, then no need to compute the derivative
+          if (psi_mat[r, s] == 0) {
+            # print("skipping derivative calculation")
+            next
+          }
+          d_ij = d_ij + psi_mat[r,s] * d1(r, s, i, j, psi_mat, G)
+        }
+      } # end loop over s
+    } # end loop over r
+
+  } # end else
+
+  return((d_ij + psi_mat[i,j]))
+}
+
+
+
+d1 = function(r, s, i, j, psi_mat, G) {
+
+  # G = obj$G
+  # p = obj$p
+  # psi_mat = obj$psi_mat
+
+  ## if (r,s) \in V
+  if (G[r, s] > 0) {
+    if (r == i && s == j) { # d psi_{ij} / d psi_{ij} = 1
+      return(1)
+    } else {                # d psi_{rs} / d psi_{ij} = 0, since psi_rs is free
+      return(0)
+    }
+  }
+
+
+  if (i > r)                            { return(0) } # (i,j) comes after (r,s)
+  if (i == r && j > s)                  { return(0) } # same row, but after
+  if (i == r && j == s && G[r, s] > 0)  { return(1) } # redundant check?
+  if (i == r && j == s && G[r, s] == 0) { return(0) } # deriv wrt to non-free: 0
+
+  if (r == 1 && s > r) { return(0) } # first row case has simplified formula
+
+  if (r > 1) { # derivative of psi_rs in 2nd row onward
+
+    tmp_sum = numeric(r - 1)
+
+    for (k in 1:(r - 1)) { # deriv taken wrt Eq. (31) in Atay
+
+      ## TODO: check values of psi_ks, psi_kr -- if 0, then can save calculation
+      ##       on the derivative
+      if (psi_mat[k,s] == 0 && psi_mat[k,r] == 0) {
+        # print("both terms 0, save recursion")
+        tmp_sum[k] = 0
+        next
+      } else {
+
+        if (psi_mat[k,s] == 0) { ## if psi_ks is 0
+          # print("saving on ks = 0")
+          tmp_sum[k] = -1/psi_mat[r,r] *
+            d1(k, s, i, j, psi_mat, G) * psi_mat[k, r]
+        } else if (psi_mat[k,r] == 0) { ## if psi_kr is 0
+          # print("saving on kr = 0")
+          tmp_sum[k] = -1/psi_mat[r,r] *
+            d1(k, r, i, j, psi_mat, G) * psi_mat[k, s]
+        } else {
+
+          if (i == j && r == i && G[r,s] == 0) {
+            tmp_sum[k] = 1/psi_mat[r,r]^2 * psi_mat[k,r] * psi_mat[k,s] -
+              1/psi_mat[r,r] * (
+                d1(k, r, i, j, psi_mat, G) * psi_mat[k, s] +
+                  d1(k, s, i, j, psi_mat, G) * psi_mat[k, r]
+              )
+          } else {
+            tmp_sum[k] = -1/psi_mat[r,r] * (
+              d1(k, r, i, j, psi_mat, G) * psi_mat[k, s] +
+                d1(k, s, i, j, psi_mat, G) * psi_mat[k, r]
+            )
+          }
+        }
+      }
+
+
+    } # end for()
+
+    return(sum(tmp_sum)) ## expression derived from Eq. (99)
+
+  } else {
+    print("case not accounted for")
+    return(NA)
+  }
+
+}
+
+
+create_psi_mat = function(u, params) {
+
+  p     = params$p
+  G     = params$G
+  b     = params$b
+  nu_i  = params$nu_i
+  P     = params$P
+  b_i   = params$b_i
+
+  FREE_PARAM_MAT = upper.tri(diag(1, p), diag = T) & G
+  u_mat = FREE_PARAM_MAT
+  u_mat = matrix(0, p, p)
+  u_mat[FREE_PARAM_MAT] = u
+  u_mat
+
+  ## u_mat should have all the free elements
+  for (i in 1:p) {
+    for (j in i:p) {
+      if (G[i,j] > 0) {
+        next # u_mat[i,j] already has value from input
+      } else {
+        if (i == 1) {
+          u_mat[i,j] = -1/P[j,j] * sum(u_mat[i,i:(j-1)] * P[i:(j-1), j])
+        } else {
+          # for rows other than first row
+          x0 = -1/P[j,j] * sum(u_mat[i,i:(j-1)] * P[i:(j-1), j])
+
+          # old formulation that still depends on Phi
+          # Psi_copy[i,j] = x0 -
+          #   sum(Phi[1:(i-1),i] / P[i,i] / (Phi[i,i] / P[j,j]) *
+          #         Phi[1:(i-1), j] / P[j,j])
+
+          # new formulation that uses Eq. (31) in Atay -- no longer uses any
+          # non-free parameters: only uses recursively defined parameters
+          # and elements of the cholesky factorization of the scale matrix
+          tmp = numeric(i-1)
+          for (r in 1:(i-1)) {
+            tmp1 = u_mat[r,i] + sum(u_mat[r,r:(i-1)] * P[r:(i-1),i] / P[i,i])
+            tmp2 = u_mat[r,j] + sum(u_mat[r,r:(j-1)] * P[r:(j-1),j] / P[j,j])
+            # print(length(u_mat[r,r:(j-1)]))
+            # print(length(P[r:(j-1),j]))
+            # print(tmp2)
+            tmp[r] = tmp1 * tmp2
+          }
+          u_mat[i,j] = x0 - 1 / u_mat[i,i] * sum(tmp)
+        }
+      }
+    }
+  }
+
+  return(u_mat)
+
+}
+
+
+
+
+
+#### hessian related functions
+
+
+#### 5/10: this is the final form of the gwish hessian -- ff_fast()
+#### load this entire file before computing any hybrid estimates
+#### note: these functions are called on block matrices by the fast_hess()
+#### function in gwish_calc.R
+
+
+# index_mat = matrix(0, p, p)
+# index_mat[upper.tri(index_mat, diag = T)][edgeInd] = 1:D
+# index_mat[upper.tri(index_mat, diag = T)]
+# t_ind = which(index_mat!=0,arr.ind = T)
+# t_ind
+#
+# index_mat[lower.tri(index_mat)] = NA
+# vbar = which(index_mat==0,arr.ind = T) # non-free elements
+# n_nonfree = nrow(vbar)
+
+
+# params = list(G = G_5, P = P, p = p, D = D, edgeInd = edgeInd,
+#               b = b, nu_i = nu_i, b_i = b_i,
+#               n_nonfree = n_nonfree, vbar = vbar, t_ind = t_ind)
+#
+#
+# hess(u, params)
+# ff(u, params)
+
+# install.packages("profvis")
+# library(profvis)
+# profvis(ff(u, params))
+
+
+
+# testblock = matrix(0, 6, 6)
+# D = ncol(testblock)
+# stride = 2
+# block = 1
+# for (r in 1:(D-1)) {
+#
+#   for (c in (r+1):D) {
+#     if (c <= (block * stride)) {
+#       testblock[r,c] = NA
+#       testblock[c,r] = NA
+#     } else {
+#       break
+#     }
+#   }
+#
+#   if ((r %% stride) == 0) {
+#     block = block + 1
+#   }
+#
+# }
+# testblock
+
+ff_fast = function(u, params) {
+
+  G = params$G
+  D = params$D
+  t_ind = params$t_ind
+  n_nonfree = params$n_nonfree
+  vbar = params$vbar
+  psi_mat = create_psi_mat(u, params)
+  #
+  #
+  # obj = list(G = G, p = p, psi_mat = psi_mat, n_nonfree = n_nonfree,
+  #            vbar = vbar)
+
+  H = matrix(0, D, D)
+  for (d in 1:D) {
+
+    i = t_ind[d,1] # row index
+    j = t_ind[d,2] # col index
+
+    # populate H[i,i] element
+    if (i == j) { # one of the original diag elements in the psi matrix, Psi_ii
+      tmp = 0
+      for (a in 1:n_nonfree) {
+        rr = vbar[a, 1] # row index of non-free element
+        ss = vbar[a, 2] # col index of non-free element
+
+        tmp = tmp + d1(rr, ss, i, j, psi_mat, G)^2
+      }
+      # if (tmp != 0) {print("tmp != 0")}
+
+      H[d,d] = (params$b + params$nu_i[i] - 1) / psi_mat[i,i]^2 + 1 + tmp
+    } else { # 2nd order partial for original off-diag elements in the psi mat
+
+      tmp = 0
+      for (a in 1:n_nonfree) {
+        rr = vbar[a, 1] # row index of non-free element
+        ss = vbar[a, 2] # col index of non-free element
+
+        tmp = tmp + d1(rr, ss, i, j, psi_mat, G)^2
+      }
+      H[d,d] = 1 + tmp
+    }
+  }
+
+
+  ### Populate the hessian matrix. This is a (D x D) matrix, where D = p(p+1)/2
+  ### outer loop: iterate over the row of the 2nd order derivative
+  ### inner loop: iterate over the col of the 2nd order derivative
+  ### We use t_ind in 2 ways:
+  ### (1) uniquely identify the row that we are in (1st order derivative)
+  ### (2) lets us iterate through the 2nd order derivatives
+  ###
+
+  # testblock = matrix(NA, 6, 6)
+  stride = D
+  block = 1
+
+  for (r in 1:(D-1)) {
+
+    # obtain matrix index of the 1st order derivative (uniquely ID row)
+    i = t_ind[r,1] # 1st order row index
+    j = t_ind[r,2] # 2nd order col index
+
+    for (c in (r+1):D) { # start on the column after the diagonal
+
+      if (c <= (block * stride)) {
+        # obtain matrix index of the 2nd order derivative
+        # d^2(psi) / (dpsi_ij dpsi_kl)
+        k = t_ind[c,1] # 2nd order row index
+        l = t_ind[c,2] # 2nd order col index
+
+        # if (r == 3 && c == 12) {
+        #   print(paste('i = ', i, ', j = ', j, ', k = ', k, ', l = ', l, sep = ''))
+        # }
+
+        H[r,c] = d2(i, j, k, l, psi_mat, params)
+        H[c,r] = H[r,c]
+      } else {
+        break
+      }
+
+    } # end for loop over the columns
+
+    if ((r %% stride) == 0) {
+      block = block + 1
+    }
+
+    # print(paste("finished row r =", r, sep = ''))
+  } # end outer for loop over rows
+
+
+  return(H)
+
+
+}
+
+
+
+
+
+
+ff = function(u, params) {
+
+  G = params$G
+  D = params$D
+  t_ind = params$t_ind
+  n_nonfree = params$n_nonfree
+  vbar = params$vbar
+  psi_mat = create_psi_mat(u, params)
+  #
+  #
+  # obj = list(G = G, p = p, psi_mat = psi_mat, n_nonfree = n_nonfree,
+  #            vbar = vbar)
+
+  H = matrix(0, D, D)
+  for (d in 1:D) {
+
+    i = t_ind[d,1] # row index
+    j = t_ind[d,2] # col index
+
+    # populate H[i,i] element
+    if (i == j) { # one of the original diag elements in the psi matrix, Psi_ii
+      tmp = 0
+      for (a in 1:n_nonfree) {
+        rr = vbar[a, 1] # row index of non-free element
+        ss = vbar[a, 2] # col index of non-free element
+
+        tmp = tmp + d1(rr, ss, i, j, psi_mat, G)^2
+      }
+      # if (tmp != 0) {print("tmp != 0")}
+
+      H[d,d] = (params$b + params$nu_i[i] - 1) / psi_mat[i,i]^2 + 1 + tmp
+    } else { # 2nd order partial for original off-diag elements in the psi mat
+
+      tmp = 0
+      for (a in 1:n_nonfree) {
+        rr = vbar[a, 1] # row index of non-free element
+        ss = vbar[a, 2] # col index of non-free element
+
+        tmp = tmp + d1(rr, ss, i, j, psi_mat, G)^2
+      }
+      H[d,d] = 1 + tmp
+    }
+  }
+
+
+  ### Populate the hessian matrix. This is a (D x D) matrix, where D = p(p+1)/2
+  ### outer loop: iterate over the row of the 2nd order derivative
+  ### inner loop: iterate over the col of the 2nd order derivative
+  ### We use t_ind in 2 ways:
+  ### (1) uniquely identify the row that we are in (1st order derivative)
+  ### (2) lets us iterate through the 2nd order derivatives
+  ###
+  for (r in 1:(D-1)) {
+
+    # obtain matrix index of the 1st order derivative (uniquely ID row)
+    i = t_ind[r,1] # 1st order row index
+    j = t_ind[r,2] # 2nd order col index
+
+    for (c in (r+1):D) { # start on the column after the diagonal
+      # obtain matrix index of the 2nd order derivative
+      # d^2(psi) / (dpsi_ij dpsi_kl)
+      k = t_ind[c,1] # 2nd order row index
+      l = t_ind[c,2] # 2nd order col index
+
+      # if (r == 3 && c == 12) {
+      #   print(paste('i = ', i, ', j = ', j, ', k = ', k, ', l = ', l, sep = ''))
+      # }
+
+      H[r,c] = d2(i, j, k, l, psi_mat, params)
+      H[c,r] = H[r,c]
+    } # end for loop over the columns
+    # print(paste("finished row r =", r, sep = ''))
+  } # end outer for loop over rows
+
+
+  return(H)
+}
+
+
+
+
+
+## this function will call a recursive function
+d2 = function(i, j, k, l, psi_mat, params) {
+
+  G = params$G
+  tmp = numeric(params$n_nonfree)
+  for (n in 1:params$n_nonfree) {
+    r = params$vbar[n,1]
+    s = params$vbar[n,2]
+    if (psi_mat[r,s] == 0) { # avoid needless recursion if coefficient is 0
+      tmp[n] = d1(r,s,k,l,psi_mat,G) * d1(r,s,i,j,psi_mat,G)
+    } else {
+      tmp[n] = d1(r,s,k,l,psi_mat,G) * d1(r,s,i,j,psi_mat,G) +
+        psi_mat[r,s] * d2_rs(r,s,i,j,k,l, psi_mat,G)
+    }
+  } # end for loop iterating over non-free elements
+  return(sum(tmp))
+} # end d2() function
+
+
+
+
+
+## function that will recursively compute the 2nd order derivative
+## assumption: we don't have i = k AND j = l, i.e., comuting 2nd order deriv.
+## for diagonal term in the hessian
+d2_rs = function(r, s, i, j, k, l, psi_mat, G) {
+
+  # G = obj$G
+  # psi_mat = obj$psi_mat
+
+  if (G[r,s] > 0)                           { return (0) } # free element
+  if (r < i || r < k)                       { return (0) } # row below
+  if (r == i && r == k && (s < j || s < l)) { return (0) } # same row, col after
+
+  # general case: recursive call for the 2nd order derivative
+  tmp = numeric(r-1)
+  for (m in 1:(r-1)) {
+
+    if (psi_mat[m,s] == 0 && psi_mat[m,r] == 0) {
+      # print('both psi_ms = 0, psi_mr = 0, save recursion')
+      tmp[m] = - 1 / psi_mat[r,r] *
+        (d1(m,r,i,j,psi_mat,G) * d1(m,s,k,l,psi_mat,G) +
+           d1(m,r,k,l,psi_mat,G) * d1(m,s,i,j,psi_mat,G))
+    } else {
+
+      if (r == i && i == j) { # case: d^2(psi_rs) / (dpsi_rr dpsi_kl)
+
+        if (psi_mat[m,s] == 0) {
+          print("saving ms = 0")
+          tmp[m] = 1/psi_mat[r,r]^2 * (psi_mat[m,r] * d1(m,s,k,l,psi_mat,G)) -
+            1/psi_mat[r,r] *
+            (d2_rs(m,s,i,j,k,l,psi_mat,G) * psi_mat[m,r] +
+               d1(m,r,i,j,psi_mat,G) * d1(m,s,k,l,psi_mat,G) +
+               d1(m,r,k,l,psi_mat,G) * d1(m,s,i,j,psi_mat,G))
+        } else if (psi_mat[m,r] == 0) {
+          print("saving mr = 0")
+          tmp[m] = 1/psi_mat[r,r]^2 * (d1(m,r,k,l,psi_mat,G) * psi_mat[m,s]) -
+            1/psi_mat[r,r] *
+            (d2_rs(m,r,i,j,k,l,psi_mat,G) * psi_mat[m,s] +
+               d1(m,r,i,j,psi_mat,G) * d1(m,s,k,l,psi_mat,G) +
+               d1(m,r,k,l,psi_mat,G) * d1(m,s,i,j,psi_mat,G))
+        } else {
+          tmp[m] = 1/psi_mat[r,r]^2 *
+            (d1(m,r,k,l,psi_mat,G) * psi_mat[m,s] + psi_mat[m,r] * d1(m,s,k,l,psi_mat,G)) -
+            1/psi_mat[r,r] *
+            (d2_rs(m,r,i,j,k,l,psi_mat,G) * psi_mat[m,s] +
+               d2_rs(m,s,i,j,k,l,psi_mat,G) * psi_mat[m,r] +
+               d1(m,r,i,j,psi_mat,G) * d1(m,s,k,l,psi_mat,G) +
+               d1(m,r,k,l,psi_mat,G) * d1(m,s,i,j,psi_mat,G))
+        }
+
+      } else if (r == k && k == l) { # case: d^2(psi_rs) / (dpsi_ij dpsi_rs)
+        # flip the order so we get into the first if()
+        tmp[m] = d2_rs(r,s,k,l,i,j,psi_mat,G)
+      } else {
+        ### case: r != i
+
+        if (psi_mat[m,s] == 0) {
+          print("saving ms = 0")
+          tmp[m] = - 1 / psi_mat[r,r] *
+            (d1(m,r,i,j,psi_mat,G) * d1(m,s,k,l,psi_mat,G) +
+               d1(m,r,k,l,psi_mat,G) * d1(m,s,i,j,psi_mat,G) +
+               psi_mat[m,r] * d2_rs(m,s,i,j,k,l,psi_mat,G))
+        } else if (psi_mat[m,r] == 0) {
+          print("saving mr = 0")
+          tmp[m] = - 1 / psi_mat[r,r] *
+            (d1(m,r,i,j,psi_mat,G) * d1(m,s,k,l,psi_mat,G) +
+               d1(m,r,k,l,psi_mat,G) * d1(m,s,i,j,psi_mat,G) +
+               psi_mat[m,s] * d2_rs(m,r,i,j,k,l,psi_mat,G))
+        } else {
+          tmp[m] = - 1 / psi_mat[r,r] *
+            (d1(m,r,i,j,psi_mat,G) * d1(m,s,k,l,psi_mat,G) +
+               d1(m,r,k,l,psi_mat,G) * d1(m,s,i,j,psi_mat,G) +
+               psi_mat[m,s] * d2_rs(m,r,i,j,k,l,psi_mat,G) +
+               psi_mat[m,r] * d2_rs(m,s,i,j,k,l,psi_mat,G))
+        }
+      }
+
+
+    }
+
+
+
+
+  }
+
+  return(sum(tmp))
+} # end d2_rs() function
+
+
+
+
+
+
 
 
 
