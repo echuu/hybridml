@@ -278,7 +278,7 @@ gwish_preprocess = function(post_samps, D, params) {
 #### ---------------------------------------------------------------------------
 
 
-#### gradient related functions
+#### gradient related functions ------------------------------------------------
 
 
 
@@ -506,7 +506,7 @@ create_psi_mat = function(u, params) {
 
 
 
-#### hessian related functions
+#### hessian related functions -------------------------------------------------
 
 
 #### 5/10: this is the final form of the gwish hessian -- ff_fast()

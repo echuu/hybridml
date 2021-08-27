@@ -5,14 +5,30 @@
 #### note: these functions are called on block matrices by the fast_grad()
 #### function in gwish_calc.R
 
-# u_df %>% head
-# u = u_df[1,1:D] %>% unlist %>% unname
+u_df %>% head
+u = u_df[1,1:G5_obj$D] %>% unlist %>% unname
+
+f(u, G5_obj)
+fast_grad(u, G5_obj)
+
+library(microbenchmark)
+microbenchmark(f(u, G5_obj),
+               fast_grad(u, G5_obj))
+
+G5_obj$edgeInd
+
+create_psi_mat(u, G5_obj)
+
+
+Rcpp::sourceCpp("C:/Users/ericc/Documents/hybridml/examples/gwish/gwish.cpp")
+grad_cpp(u, create_psi_mat(u, G5_obj), G5_obj)
+
+
 
 # psi_mat = create_psi_mat(u, params)
 # psi_mat
 #
-# f(u, params)
-# grad(u, params)
+
 #
 # f(u, params)
 # grad(u, params)
@@ -79,7 +95,9 @@ dpsi = function(i, j, psi_mat, params) {
             # print("skipping derivative calculation")
             next
           }
+          # print(paste('r = ', r, ', s = ', s, ', i = ', i, ', j = ', j, sep = ''))
           d_ij = d_ij + psi_mat[r,s] * d1(r, s, i, j, psi_mat, G)
+          # print(d_ij)
         }
       } # end loop over s
     } # end loop over r
