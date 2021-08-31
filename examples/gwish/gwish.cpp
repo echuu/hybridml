@@ -9,11 +9,25 @@ typedef unsigned int u_int;
 // [[Rcpp::depends(RcppArmadillo)]]
 #define EIGEN_PERMANENTLY_DISABLE_STUPID_WARNINGS
 
-float create_psi_mat_cpp(Rcpp::NumericVector& u, Rcpp::List& params);
+/** utility functions **/
+arma::mat create_psi_mat_cpp(Rcpp::NumericVector& u, Rcpp::List& params);
 arma::vec chol2vec(arma::mat& M, u_int D);
-arma::vec grad_cpp(Rcpp::NumericVector& u, arma::mat& psi_mat, Rcpp::List& params);
+
+/** gradient related functions **/
+arma::vec grad_cpp(arma::vec& u, Rcpp::List& params);
 float dpsi_cpp(u_int i, u_int j, arma::mat& psi_mat, Rcpp::List& params);
-float dpsi_rsij(u_int r, u_int s, u_int i, u_int j, arma::mat& psi_mat, arma::mat& G);
+float dpsi_rsij(u_int r, u_int s, u_int i, u_int j, 
+	arma::mat& psi_mat, arma::mat& G);
+
+/** hessian related functions **/
+arma::mat hess_cpp(arma::vec& u, Rcpp::List& params);
+float d2(u_int i, u_int j, u_int k, u_int l, 
+	arma::mat& psi_mat, Rcpp::List& params);
+float d2_rs(u_int r, u_int s, u_int i, u_int j, u_int k, u_int l,
+	arma::mat& psi_mat, arma::mat& G);
+
+
+/** ------------------------------------------------------------------------ **/
 
 // [[Rcpp::export]]
 arma::vec chol2vec(arma::mat& M, u_int D) {
@@ -31,8 +45,7 @@ arma::vec chol2vec(arma::mat& M, u_int D) {
 
 
 // [[Rcpp::export]]
-arma::mat create_psi_mat_cpp(arma::vec u, arma::mat psi_mat,
-	Rcpp::List& params) {
+arma::mat create_psi_mat_cpp(arma::vec u, Rcpp::List& params) {
 
 	u_int p           = params["p"];    // dimension of the graph G
 	u_int D           = params["D"];    // dimension of parameter space
@@ -55,15 +68,13 @@ arma::mat create_psi_mat_cpp(arma::vec u, arma::mat psi_mat,
 	u_mat = reshape(u_prime, p, p);
 	// Rcpp::Rcout << u_mat << std::endl;
 
-
-	/* TODO: compute the non-free elmts in the matrix using the free elmts */
+	/* compute the non-free elmts in the matrix using the free elmts */
 
 	// float test = sum(u_mat[i,i:(j-1)] * P[i:(j-1), j]);
-	arma::mat x1 = psi_mat.submat(0, 0, 0, 3);
+	// arma::mat x1 = psi_mat.submat(0, 0, 0, 3);
 	//Rcpp::Rcout << x1 << std::endl; 
 	// Rcpp::Rcout << psi_mat.submat(0, 0, 3, 0) << std::endl;
 	// Rcpp::Rcout << arma::dot(x1, psi_mat.submat(0, 0, 3, 0)) << std::endl;
-
 
 	// u_mat should have all free elements in it
 	float x0, tmp1, tmp2;
@@ -72,40 +83,35 @@ arma::mat create_psi_mat_cpp(arma::vec u, arma::mat psi_mat,
 			if (G(i,j) > 0) {
 				continue; // free element, so these already have entries
 			}
-
 			if (i == 0) { // first row
 				// TODO: double check this calculation
 				u_mat(i,j) = -1/P(j,j) * arma::dot(u_mat.submat(i, i, i, j-1),
 												   P.submat(i, j, j-1, j));
 			} else {
-				x0 = 0;
+				x0 = -1/P(j,j) * arma::dot(u_mat.submat(i, i, i, j-1),
+										   P.submat(i, j, j-1, j));
 
 				arma::vec tmp(i, arma::fill::zeros);
-				for (u_int r = 0; r < (i-1); r++) { 
-					tmp1 = 0; // TODO
-					tmp2 = 0; // TODO
-
+				for (u_int r = 0; r < i; r++) { 
+					tmp1 = u_mat(r,i) + arma::dot(u_mat.submat(r, r, r, i-1),
+											P.submat(r, i, i-1, i)) / P(i,i);
+					tmp2 = u_mat(r,j) + arma::dot(u_mat.submat(r, r, r, j-1),
+											P.submat(r, j, j-1, j)) / P(j,j);
 					tmp(r) = tmp1 * tmp2;
 				}
 
 				u_mat(i,j) = x0 - 1 / u_mat(i,i) * arma::sum(tmp);
 			}
 		} // end inner for() over j
-
 	} // end outer for() over i
-	
 
-
-	// return u_mat;
 	return u_mat;
-
 } // end create_psi_mat_cpp() function
 
 
 
 // [[Rcpp::export]]
-arma::vec grad_cpp(Rcpp::NumericVector& u, arma::mat& psi_mat,
-	Rcpp::List& params) {
+arma::vec grad_cpp(arma::vec& u, Rcpp::List& params) {
 
 
 	arma::mat G       = params["G"]; // graph G represented as adjacency matrix
@@ -114,6 +120,8 @@ arma::vec grad_cpp(Rcpp::NumericVector& u, arma::mat& psi_mat,
 	u_int D           = params["D"]; // dimension of parameter space
 	// TODO: implement create_psi_mat() function later; for now, we pass it in
 	// arma::mat psi_mat = vec2chol(u, p)
+
+	arma::mat psi_mat = create_psi_mat_cpp(u, params);
 
 	// initialize matrix that can store the gradient elements
 	arma::mat gg(D, D, arma::fill::zeros);
@@ -262,3 +270,218 @@ float dpsi_rsij(u_int r, u_int s, u_int i, u_int j,
   	}
 
 } // end dpsi_rsij() function
+
+
+
+// [[Rcpp::export]]
+arma::mat hess_cpp(arma::vec& u, Rcpp::List& params) {
+
+	u_int D           = params["D"];          // dimension of parameter space
+	arma::mat G       = params["G"];          // graph G 
+	u_int n_nonfree   = params["n_nonfree"];  // # nonfree elements
+	arma::mat ind_mat = params["t_ind"];      // index of the free elements
+	arma::mat vbar    = params["vbar"];       // index of nonfree elements
+	u_int b           = params["b"];          // degrees of freedom
+	arma::vec nu_i    = params["nu_i"];       //
+	arma::mat psi_mat = create_psi_mat_cpp(u, params);
+
+	arma::mat H(D, D, arma::fill::zeros);
+
+	u_int d, i, j, a, r, c, rr, ss, k, l; // initialize various indices
+	float tmp;
+
+	// first populate the diagonal elements of the hessian matrix
+	for (d = 0; d < D; d++) {
+		// subtract one to account for 0-index in C++
+		i = ind_mat(d, 0) - 1; // row loc of d-th free element
+		j = ind_mat(d, 1) - 1; // col loc of d-th free element
+
+		if (i == j) {
+			tmp = 0;
+			for (a = 0; a < n_nonfree; a++) {
+
+				rr = vbar(a, 0) - 1; // row index of non-free element
+				ss = vbar(a, 1) - 1; // col index of non-free element
+
+				tmp += std::pow(dpsi_rsij(rr, ss, i, j, psi_mat, G), 2);
+			} // end of iteration over non-free elements
+
+			H(d,d) = (b + nu_i(i) - 1) / std::pow(psi_mat(i,i), 2) + 1 + tmp;
+		} else { 
+
+			tmp = 0;
+			for (a = 0; a < n_nonfree; a++) {
+				rr = vbar(a, 0) - 1; // row index of non-free element
+				ss = vbar(a, 1) - 1; // col index of non-free element
+
+				tmp += std::pow(dpsi_rsij(rr, ss, i, j, psi_mat, G), 2);
+			}
+
+			H(d,d) = 1 + tmp;
+		} // end if-else
+	} // end for() over d
+
+
+	// populate the off-diagonal elements of H
+	for (r = 0; r < (D-1); r++) { // index should be correct now
+
+		i = ind_mat(r,0) - 1;
+		j = ind_mat(r,1) - 1;
+
+		for (c = r + 1; c < D; c++) { // index should be correct
+
+			k = ind_mat(c, 0) - 1;
+			l = ind_mat(c, 1) - 1;
+
+			H(r,c) = d2(i, j, k, l, psi_mat, params);
+			H(c,r) = H(r,c); // reflect calculation across diagonal
+		} // end inner for() over cols
+	} // end outer for() over rows
+	return H;
+}
+
+
+// [[Rcpp::export]]
+float d2(u_int i, u_int j, u_int k, u_int l, 
+	arma::mat& psi_mat, Rcpp::List& params) {
+
+	u_int n_nonfree   = params["n_nonfree"];  // # nonfree elements
+	arma::mat G       = params["G"];          // graph G 
+	arma::mat vbar    = params["vbar"];       // index of nonfree elements
+
+	arma::vec tmp(n_nonfree, arma::fill::zeros);
+
+	u_int n, r, s;
+	for (n = 0; n < n_nonfree; n++) {
+		r = vbar(n, 0) - 1; // row index of nonfree element
+		s = vbar(n, 1) - 1; // col index of nonfree element
+		if (psi_mat(r,s) == 0) { // can be combined partially with step below
+			tmp(n) = dpsi_rsij(r, s, k, l, psi_mat, G) * 
+				dpsi_rsij(r, s, i, j, psi_mat, G);
+		} else {
+			
+			tmp(n) = dpsi_rsij(r, s, k, l, psi_mat, G) * 
+				dpsi_rsij(r, s, i, j, psi_mat, G) + 
+				psi_mat(r,s) * d2_rs(r, s, i, j, k, l, psi_mat, G);
+			// tmp(n) = d2_rs(r, s, i, j, k, l, psi_mat, G);
+		} // end of if-else
+
+	} // end for() over nonfree elements
+	return arma::sum(tmp);
+} // end d2() function
+
+
+// [[Rcpp::export]]
+float d2_rs(u_int r, u_int s, u_int i, u_int j, u_int k, u_int l,
+	arma::mat& psi_mat, arma::mat& G) {
+
+	/** assumption: we don't have i == k AND j == l, i.e., computing 2nd order
+	    derivative for diagonal term in the hessian matrix, since we've already
+	    done this previously in a loop dedicated to computing diagonal terms 
+	    in the hessian matrix
+	**/
+
+	/*********** check for early break condtions to save computing ************/
+	if (G(r, s) > 0) { return 0; } 			// free element
+	if ((r < i) || (r < k)) { return 0; }   // row below
+	// same row, col after
+	if ((r == i) && (r == k) && ((s < j) || (s < l))) { return 0; } 
+
+
+	/********* general case: recursive call for 2nd order derivative **********/
+	// see note below in loop for why vector is size r instead of size (r-1)
+	arma::vec tmp(r, arma::fill::zeros); 
+	u_int m;
+	for (m = 0; m < r; m++) { 
+		/* Note on the 0-indexing and upper limit of the loop:
+		   Because r represents the *row number*, in the R code, r = 3 for row 3
+		   so the loop will run 1:(3-1) -> 2 times, but in the C++ code, we do
+		   not need to subtract 1 from the upper limit because row 3 corresponds
+		   to r = 2, so the loop will run 0:1 -> 2 times, matching the number
+		   of iterations run in the R code
+		*/
+
+		if ((psi_mat(m, s) == 0) && (psi_mat(m, r) == 0)) { 
+			tmp(m) = - 1 / psi_mat(r, r) * (
+				dpsi_rsij(m, r, i, j, psi_mat, G) * 
+				dpsi_rsij(m, s, k, l, psi_mat, G) +
+           		dpsi_rsij(m, r, k, l, psi_mat, G) * 
+           		dpsi_rsij(m, s, i, j, psi_mat, G)
+			);
+		} else {
+
+			if ((r == i) && (i == j)) { // case: d^2(psi_rs) / (dpsi_rr dpsi_kl)
+
+				if (psi_mat(m, s) == 0) {
+					tmp(m) = 1 / std::pow(psi_mat(r, r), 2) * 
+						(psi_mat(m, r) * dpsi_rsij(m, s, k, l, psi_mat, G)) -
+						1 / psi_mat(r, r) * (
+						    d2_rs(m, s, i, j, k, l, psi_mat, G) * psi_mat(m,r) +
+			               	dpsi_rsij(m, r, i, j, psi_mat, G) * 
+			               	dpsi_rsij(m, s, k, l, psi_mat, G) +
+			               	dpsi_rsij(m, r, k, l, psi_mat, G) * 
+			               	dpsi_rsij(m, s, i, j, psi_mat, G)
+               			);
+
+				} else if (psi_mat(m, r) == 0) {
+					tmp(m) = 1 / std::pow(psi_mat(r, r), 2) * 
+						(dpsi_rsij(m, r, k, l, psi_mat, G) * psi_mat(m, s)) - 
+						1 / psi_mat(r, r) * (
+							d2_rs(m, r, i, j, k, l, psi_mat, G) * psi_mat(m,s) +
+               				dpsi_rsij(m, r, i, j, psi_mat, G) * 
+               				dpsi_rsij(m, s, k, l, psi_mat, G) +
+               				dpsi_rsij(m, r, k, l, psi_mat, G) * 
+               				dpsi_rsij(m, s, i, j, psi_mat, G)
+						);
+
+				} else {
+					tmp(m) = 1 / std::pow(psi_mat(r, r), 2) * 
+						(dpsi_rsij(m, r, k, l, psi_mat, G) * psi_mat(m, s) + 
+						 psi_mat(m, r) * dpsi_rsij(m, s, k, l, psi_mat, G)) -
+			            1 / psi_mat(r, r) * (
+			            	d2_rs(m, r, i, j, k, l, psi_mat, G) * psi_mat(m,s) +
+			               	d2_rs(m, s, i, j, k, l, psi_mat, G) * psi_mat(m,r) +
+			               	dpsi_rsij(m, r, i, j, psi_mat, G) * 
+			               	dpsi_rsij(m, s, k, l, psi_mat, G) +
+			               	dpsi_rsij(m, r, k, l, psi_mat, G) * 
+			               	dpsi_rsij(m, s, i, j, psi_mat, G)
+			        	);
+				} // 
+
+			} else if ((r == k) && (k == l)) { 
+				tmp(m) = d2_rs(r, s, k, l, i, j, psi_mat, G);
+			} else { // case when r != i
+				if (psi_mat(m, s) == 0) { 
+					tmp(m) = -1 / psi_mat(r, r) * (
+						dpsi_rsij(m,r,i,j,psi_mat,G) * 
+						dpsi_rsij(m,s,k,l,psi_mat,G) +
+               			dpsi_rsij(m,r,k,l,psi_mat,G) * 
+               			dpsi_rsij(m,s,i,j,psi_mat,G) +
+              			psi_mat(m,r) * d2_rs(m, s, i, j, k, l, psi_mat, G)
+					);
+
+				} else if (psi_mat(m, r) == 0) {
+					tmp(m) = - 1 / psi_mat(r, r) * (
+						dpsi_rsij(m, r, i, j, psi_mat, G) * 
+						dpsi_rsij(m, s, k, l, psi_mat, G) +
+               			dpsi_rsij(m, r, k, l, psi_mat, G) * 
+               			dpsi_rsij(m, s, i, j, psi_mat, G) +
+               			psi_mat(m, s) * d2_rs(m, r, i, j, k, l, psi_mat, G)
+					);
+				} else { 
+					tmp(m) = - 1 / psi_mat(r, r) * (
+						dpsi_rsij(m, r, i, j, psi_mat, G) * 
+						dpsi_rsij(m, s, k, l, psi_mat, G) +
+		               	dpsi_rsij(m, r, k, l, psi_mat, G) * 
+		               	dpsi_rsij(m, s, i, j, psi_mat, G) +
+		               	psi_mat(m, s) * d2_rs(m, r, i, j, k, l, psi_mat, G) +
+		               	psi_mat(m, r) * d2_rs(m, s, i, j, k, l, psi_mat, G)
+					);
+				}
+
+			}
+		} // end of main if-else
+	} // end for() over m
+
+	return arma::sum(tmp);
+} // end d2_rs() function
