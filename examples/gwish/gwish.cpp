@@ -13,6 +13,9 @@ typedef unsigned int u_int;
 arma::mat create_psi_mat_cpp(Rcpp::NumericVector& u, Rcpp::List& params);
 arma::vec chol2vec(arma::mat& M, u_int D);
 
+
+float psi_cpp_mat(arma::mat& psi_mat, Rcpp::List& params);
+
 /** gradient related functions **/
 arma::vec grad_cpp(arma::vec& u, Rcpp::List& params);
 float dpsi_cpp(u_int i, u_int j, arma::mat& psi_mat, Rcpp::List& params);
@@ -28,6 +31,96 @@ float d2_rs(u_int r, u_int s, u_int i, u_int j, u_int k, u_int l,
 
 
 /** ------------------------------------------------------------------------ **/
+
+// [[Rcpp::export]]
+arma::vec approx_integral_0(u_int K, arma::mat& psi_df, Rcpp::List& params) {
+
+	u_int D           = params["D"];    // dimension of parameter space
+
+	arma::vec log_terms(K, arma::fill::zeros);
+
+	arma::mat H_k(D, D, arma::fill::zeros);
+	arma::mat H_k_inv(D, D, arma::fill::zeros);
+	arma::vec lambda_k(D, arma::fill::zeros);
+	arma::vec b_k(D, arma::fill::zeros);
+	arma::vec m_k(D, arma::fill::zeros);
+
+	// arma::vec u_k(D, psi_df.submat(0, 0, 0, D-1));
+
+	arma::vec u_k = arma::conv_to< arma::vec >::from(psi_df.row(0));
+
+	for (u_int k = 0; k < K; k++) {
+
+		double val = 0;
+		double sign;
+		//log_det(val, sign, H_k); 
+
+
+		log_terms(k) = D / 2 * std::log(2 * M_PI) - 0.5 * val;
+
+	} // end for() over k
+
+
+	return u_k;
+} // end approx_integral() function
+
+
+// [[Rcpp::export]]
+arma::vec approx_integral(u_int K, arma::mat& psi_df, arma::mat& bounds,
+	Rcpp::List& params) {
+
+	u_int D           = params["D"];    // dimension of parameter space
+
+	arma::vec log_terms(K, arma::fill::zeros);
+	arma::vec G_k(K, arma::fill::zeros);
+
+	arma::mat H_k(D, D, arma::fill::zeros);
+	arma::mat H_k_inv(D, D, arma::fill::zeros);
+	arma::vec lambda_k(D, arma::fill::zeros);
+	arma::vec b_k(D, arma::fill::zeros);
+	arma::vec m_k(D, arma::fill::zeros);
+
+	arma::vec u_k(D, arma::fill::zeros);
+
+	for (u_int k = 0; k < K; k++) {
+
+		// Rcpp::Rcout<< k << std::endl;
+
+		u_k = arma::conv_to< arma::vec >::from(psi_df.submat(k, 0, k, D-1));
+		// Rcpp::Rcout<< u_k << std::endl;
+		H_k = hess_cpp(u_k, params);
+		H_k_inv = inv(H_k);
+		lambda_k = grad_cpp(u_k, params);
+		b_k = H_k * u_k - lambda_k;
+		m_k = H_k_inv * b_k;
+
+
+		// TODO: extract the lower and upper bounds of the k-th partition
+
+
+		double val = 0;
+		double sign;
+		log_det(val, sign, H_k); 
+		// Rcpp::Rcout << val << std::endl;
+
+		// TODO: load the epmgp code into the same directory so that we can use
+		// the EP code directly without having to go back into R env
+		
+		log_terms(k) = D / 2 * std::log(2 * M_PI) - 0.5 * val + 
+			arma::dot(lambda_k, u_k) - 
+			(0.5 * u_k.t() * H_k * u_k).eval()(0,0) + 
+			(0.5 + m_k.t() * H_k * m_k).eval()(0,0);
+		
+		// float x =  (m_k.t() * H_k * m_k).eval()(0,0);
+		// Rcpp::Rcout << x << std::endl;
+
+	} // end for() over k
+
+	// TODO: find log-sum-exp function in arma
+	return log_terms;
+} // end approx_integral() function
+
+
 
 // [[Rcpp::export]]
 arma::vec chol2vec(arma::mat& M, u_int D) {
@@ -111,6 +204,58 @@ arma::mat create_psi_mat_cpp(arma::vec u, Rcpp::List& params) {
 
 
 // [[Rcpp::export]]
+float psi_cpp(arma::vec& u, Rcpp::List& params) {
+
+	u_int p           = params["p"];    // dimension of the graph G
+	u_int D           = params["D"];    // dimension of parameter space
+	u_int b           = params["b"];    // degrees of freedom
+	arma::vec nu_i    = params["nu_i"]; // see p. 329 of Atay (step 2)
+	arma::vec b_i     = params["b_i"];  // see p. 329 of Atay (step 2)
+	arma::mat P       = params["P"];    // upper cholesky factor of V_n
+	arma::mat G       = params["G"];    // graph G 
+
+	arma::mat psi_mat = create_psi_mat_cpp(u, params);
+
+	float psi_u = p * std::log(2);
+	for (u_int i = 0; i < p; i++) {
+		psi_u += (b + b_i(i) - 1) * std::log(P(i, i)) + 
+			(b + nu_i(i) - 1) * std::log(psi_mat(i, i)) -
+			0.5 * std::pow(psi_mat(i,i), 2);
+		for (u_int j = i + 1; j < p; j++) {
+			psi_u += -0.5 * std::pow(psi_mat(i,j), 2);
+		}
+	}
+
+	return -psi_u;
+} // end of psi_cpp() function
+
+
+// [[Rcpp::export]]
+float psi_cpp_mat(arma::mat& psi_mat, Rcpp::List& params) {
+
+	u_int p           = params["p"];    // dimension of the graph G
+	u_int D           = params["D"];    // dimension of parameter space
+	u_int b           = params["b"];    // degrees of freedom
+	arma::vec nu_i    = params["nu_i"]; // see p. 329 of Atay (step 2)
+	arma::vec b_i     = params["b_i"];  // see p. 329 of Atay (step 2)
+	arma::mat P       = params["P"];    // upper cholesky factor of V_n
+	arma::mat G       = params["G"];    // graph G 
+
+	float psi_u = p * std::log(2);
+	for (u_int i = 0; i < p; i++) {
+		psi_u += (b + b_i(i) - 1) * std::log(P(i, i)) + 
+			(b + nu_i(i) - 1) * std::log(psi_mat(i, i)) -
+			0.5 * std::pow(psi_mat(i,i), 2);
+		for (u_int j = i + 1; j < p; j++) {
+			psi_u += -0.5 * std::pow(psi_mat(i,j), 2);
+		}
+	}
+	return -psi_u;
+}
+
+
+
+// [[Rcpp::export]]
 arma::vec grad_cpp(arma::vec& u, Rcpp::List& params) {
 
 
@@ -129,13 +274,10 @@ arma::vec grad_cpp(arma::vec& u, Rcpp::List& params) {
 	for (u_int i = 0; i < p; i++) {
 		for (u_int j = i; j < p; j++) {
 			if (G(i,j) > 0) {
-
 				gg(i,j) = dpsi_cpp(i, j, psi_mat, params);
-
 			}
 		}
 	}
-
 	// convert the matrix back into a vector and return only the entries
 	// that have a corresponding edge in the graph 
 	arma::vec grad_vec = chol2vec(gg, p);
