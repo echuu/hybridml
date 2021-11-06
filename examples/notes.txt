@@ -1,0 +1,90 @@
+
+
+Idea 1: level set estimation
+
+- level set of the posterior distribution
+- estimate the level set from the posterior samples
+- broadly similar to what we've been doing
+- HPD estimation
+- scan thru: what kind of software is out there (HDInterval), takes posterior samples and gives highest posterior density set
+	- see how scalable this is
+	- low hanging fruit if it's only in 1-D or in low dimensions
+	- hpd set is a level set of the distribution
+
+----------------
+
+Idea 2: manifold estimation using trees 
+- bayesian additive regression tree (uncertainty quantification)
+- bayesian regression ways for this are scarce, could build a bayesian method
+- yun yang --> GPs
+
+
+
+Kpotufe. S (2009). Escaping the curse of dimensionality with a tree-based regressor. [COLT]
+
+Kpotufe. S and Dasgupta, S. (2012). A tree-based regressor that adapts to intrinsic dimensions.
+
+
+
+9/23 meeting:
+manifold learning:
+- covariates concentrated in a specific region (rather than looking at it from a variable selection standpoint)
+- not necessarily a lower dimensional space where the posterior lives, but rather a super-concentrated region
+- manifold: solution to an equation f(\theta) = 0 <- this could be the solution to a manifold
+- in our case, look at the region for which the posterior distribution has great probability
+
+goal: a few steps away from current literature: 
+- integrate some manifold learning ideas inside BART
+- tree-based learning manifold learning papers 
+- 
+
+- we want to be more along the theme of the RP trees, we just care about the variables being a manifold
+- ultimate goal is still the regressor, function estimation
+- theoretical questions:
+	- estimating nonparametric functions are difficult: D variables, alpah-smooth, twice-smooth; squared minimax rate 
+	- nothing has been said about recovering the correct variables, but if the regressor depends on a smaller # of variables, then we can build estimates with an improved rate
+
+
+what immediate action items should we do:
+
+basic setup:
+- take usual BART with the weight fitted, what modifications can we do to the model setup to be more general
+- usual bart is always doing dyadic splits
+	- now if all the variables are important, then what is the trick in the dasgputa paper that lets us navigate this space
+	- putting this manifold learning into the BART framework 
+
+- how the setup looks like in dasgputa, and what would the changes involve in integrating the methodology into the BART methodology
+
+- Didong Li (David Dunson) spherelets
+
+1) 
+
+
+
+
+----------------
+
+prelim:
+- shoot for sometime in november
+- email committee to setup a date
+	- combined presentation
+	- 
+----------------------------------------------
+
+
+
+graphml ------------------------------------------------------------------------
+- create new package that is centered around gwishart
+	- create it using Rcpp (the hope is that this will allow R code in it as well?)
+	- include gwish.cpp, which has ALL of the C++ functions in it for the current implementation
+	- make sure gwish.cpp, as is, works when compiled
+	- start taking stuff out of the gwish.cpp file (utils, ep, grad, hessian)
+		- keep the main file just for the main approximation function
+		- everything else has its own file
+	- bring in donald's cpart package (test first for consistency with rpart output)
+		- once it works, separate this out into its own file(s)
+
+
+"C:\Program Files\R\R-4.0.3\bin\x64\Rgui.exe" --cd-to-userdocs
+
+

@@ -129,6 +129,55 @@ init_stacked_graph = function(G_in, b, n, V, n_graphs) {
 }
 
 
+h = function() {
+  options(scipen = 999)
+  options(dplyr.summarise.inform = FALSE)
+
+  ## fit the regression tree via rpart()
+  u_rpart = rpart::rpart(psi_u ~ ., u_df)
+
+  ## (3) process the fitted tree
+  # (3.1) obtain the (data-defined) support for each of the parameters
+  param_support = extractSupport(u_df, D) #
+
+  # (3.2) obtain the partition
+  u_partition = extractPartition(u_rpart, param_support)
+
+  #### hybrid extension begins here ------------------------------------------
+
+  ### (1) find global mean
+  # u_0 = colMeans(u_df[,1:D]) %>% unname() %>% unlist() # global mean
+
+  if (is.null(u_0)) {
+    MAP_LOC = which(u_df$psi_u == min(u_df$psi_u))
+    u_0 = u_df[MAP_LOC,1:D] %>% unname() %>% unlist()
+    # print(u_0)
+  }
+
+  ### (2) find point in each partition closest to global mean (for now)
+  # u_k for each partition
+  u_df_part = u_df %>% dplyr::mutate(leaf_id = u_rpart$where)
+
+  l1_cost = apply(u_df_part[,1:D], 1, l1_norm, u_0 = u_0)
+  u_df_part = u_df_part %>% dplyr::mutate(l1_cost = l1_cost)
+
+  # take min result, group_by() leaf_id
+  psi_df = u_df_part %>%
+    dplyr::group_by(leaf_id) %>% dplyr::filter(l1_cost == min(l1_cost)) %>%
+    data.frame
+
+  bounds = u_partition %>% dplyr::arrange(leaf_id) %>%
+    dplyr::select(-c("psi_hat", "leaf_id"))
+  psi_df = psi_df %>% dplyr::arrange(leaf_id)
+
+  K = nrow(bounds)
+  approx_integral(K, as.matrix(psi_df), as.matrix(bounds), G5_obj)
+}
+
+
+
+
+
 source("examples/gwish/gwish_density.R")
 library(BDgraph)
 library(dplyr)
@@ -159,12 +208,12 @@ I_G = function(delta) {
 (Z_5  = log(2^(0.5*p*b + 7)) + I_G(0.5*(b-2)) + (-0.5 * p * b - 7) * log(n))
 Z = G5_obj$n_graphs * Z_5
 
-G5_obj$vbar
-G5_obj$G
-G5_obj$n_graphs
+# G5_obj$vbar
+# G5_obj$G
+# G5_obj$n_graphs
 
 set.seed(1)
-J = 5000
+J = 2000
 samps = samplegw(J, G5_obj$G, G5_obj$b, 0, G5_obj$V_n, G5_obj$S, solve(G5_obj$P),
                  G5_obj$FREE_PARAMS_ALL)
 
@@ -172,15 +221,20 @@ u_samps = samps$Psi_free %>% data.frame
 u_df = gwish_preprocess(u_samps, G5_obj$D, G5_obj)     # J x (D_u + 1)
 u_star = gwish_globalMode(u_df, G5_obj, G5_obj)
 
-
 logzhat = hybml_gwish(u_df, G5_obj,
                       psi = psi, grad = grad, hess = hess,
                       u_0 = u_star)$logz
 logzhat # -22.72094
 gnorm(G, b, n * V, J) # -22.8673
 Z # -22.86793
+h()
 
-
+library(microbenchmark)
+microbenchmark(r = hybml_gwish(u_df, params_G5, psi = psi, grad = fast_grad, hess = fast_hess, u_0 = u_star_cpp)$logz,
+               cpp = hybml_gwish_cpp(u_df, G5_obj, psi = psi_cpp, grad = grad_cpp, hess = hess_cpp, u_0 = u_star_cpp)$logz,
+               cpp_fast = h(),
+               gnorm = gnorm(G, b, V, J),
+               times = 20)
 
 
 

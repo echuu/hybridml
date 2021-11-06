@@ -1,6 +1,7 @@
 
 library(dplyr)
-source("examples/hiw/hiw_helper.R")
+source("C:/Users/ericc/Documents/hybridml/examples/hiw/hiw_helper.R")
+
 Rcpp::sourceCpp("C:/Users/ericc/mlike_approx/speedup/hiw.cpp")
 
 library(dplyr)
@@ -70,10 +71,52 @@ J = 1000
 postIW = sampleHIW(J, D_u, D_0, testG, b, N, V, S, edgeInd)
 post_samps = postIW$post_samps                 # (J x D_u)
 u_df = hybridml::preprocess(post_samps, D_u, params)     # J x (D_u + 1)
+u_df = preprocess(post_samps, D_u, params)     # J x (D_u + 1)
+
 (LIL = logmarginal(Y, testG, b, V, S))
 
 # slow_grad = function(u, params) { pracma::grad(old_psi, u, params = params) }
 # slow_hess = function(u, params) { pracma::hessian(old_psi, u, params = params) }
+
+globalMode = function(u_df, params, D = ncol(u_df) - 1, tolerance = 0.00001, maxsteps = 200) {
+
+  # use the MAP as the starting point for the algorithm
+  MAP_LOC = which(u_df$psi_u == min(u_df$psi_u))[1]
+  theta = u_df[MAP_LOC,1:D] %>% unname() %>% unlist()
+
+  numsteps = 0
+  tolcriterion = 100
+  step.size = 1
+
+
+  while(tolcriterion > tolerance && numsteps < maxsteps){
+
+    G = -hess(theta, params)
+    G = prama::hessian(old_psi, theta, params = params)
+    invG = solve(G)
+    thetaNew = theta + step.size * invG %*% grad(theta, params)
+
+    # if precision turns negative or if the posterior probability of
+    # thetaNew becomes smaller than the posterior probability of theta
+    if(-psi(thetaNew, params) < -psi(theta, params)) {
+      cat('tolerance reached on log scale =', tolcriterion, '\n')
+      print(paste("converged -- ", numsteps, " iters", sep = ''))
+      return(theta)
+    }
+
+    tolcriterion = abs(psi(thetaNew, params)-psi(theta, params))
+    theta = thetaNew
+    numsteps = numsteps + 1
+  }
+
+  if(numsteps == maxsteps)
+    warning('Maximum number of steps reached in Newton method.')
+
+  print(paste("converged -- ", numsteps, " iters", sep = ''))
+  return(theta)
+}
+
+
 
 u_star = globalMode(u_df, params)
 out = hybridml::hybml(u_df, params, grad = grad, hess = hess, u_0 = u_star)

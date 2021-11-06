@@ -119,7 +119,8 @@ samplegw = function(J, G, b, N, V, S, P_inv, param_ind) {
 
   out = list(Phi = t(Phi),
              Psi = t(Psi),
-             Psi_free = t(Psi_free))
+             Psi_free = t(Psi_free),
+             Omega = Omega_post)
 
 }
 
