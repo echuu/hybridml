@@ -1393,7 +1393,6 @@ double dpsi_ij(u_int i, u_int j, arma::mat& psi_mat, Rcpp::List& params) {
     } // end if-else
     // only get to this return statement if we go through the else()
     return d_ij + psi_mat(i,j);
-
 } // end dpsi() function
 
 // [[Rcpp::export]]
@@ -1409,11 +1408,15 @@ int test() {
 }
 
 // [[Rcpp::export]]
-double dpsi(u_int r, u_int s, u_int i, u_int j, arma::mat& psi, 
-    Rcpp::List& params) {
+double dpsi(u_int r, u_int s, u_int i, u_int j, arma::mat& psi, Rcpp::List& params) {
 
     arma::mat G = params["G"];
     arma::mat L = params["P"];
+
+    // Rcpp::Rcout << "beginning"  << std::endl;
+    // Rcpp::Rcout << "G(" << r << ", " << s << ") = " << G(r,s) << std::endl;
+    // Rcpp::Rcout << "r =  " << r << ", s =  " << s << ", i =  " << i << 
+    //    ", j =  " << j << std::endl;
 
     if (G(r, s) > 0) { 
         if ((r == i) && (s == j)) { // d psi_{ij} / d psi_{ij} = 1
@@ -1436,12 +1439,13 @@ double dpsi(u_int r, u_int s, u_int i, u_int j, arma::mat& psi,
         // the initial check in this function: if (G(r,s) > 0)
         x = 0;
         for (k = 0; k < s; k++) { 
-            x += dpsi(r, s, i, j, psi, params) * xi(k, s, L); // correct G
+            x += dpsi(r, k, i, j, psi, params) * xi(k, s, L); // correct G
         }
         return -x;
     } // end row 1 case
 
-    bool DWRT_SAME_ROW_DIAG = ((i == j) && (r == i) && (G(r, s) > 0));
+    bool DWRT_SAME_ROW_DIAG = ((i == j) && (r == i) && (G(r, s) == 0));
+    // bool DWRT_SAME_ROW_DIAG = ((i == j) && (r == i));
     double s0 = 0, s10 = 0, s11 = 0; 
     double s12 = 0, s13 = 0, s110 = 0, s111 = 0, s120 = 0, s121 = 0; // i != j
     double out; // store the result of the calculation
@@ -1449,10 +1453,11 @@ double dpsi(u_int r, u_int s, u_int i, u_int j, arma::mat& psi,
 
     // TODO: THIS CHUNK IN PROGRESS
     if (DWRT_SAME_ROW_DIAG) { // dpsi_rs / dpsi_rr
-        for (k = 0; k < r; k++) { 
+        // Rcpp::Rcout << "HERE"  << std::endl;
+        for (k = r; k < s; k++) { 
             s0 += xi(k, s, L) * dpsi(r, k, i, j, psi, params);
         }
-        for (k = 0; k < s; k++) {
+        for (k = 0; k < r; k++) {
             for (l = k; l < s; l++) {
                 s10 += psi(k,l) * xi(l, s, L);
             }
@@ -1467,7 +1472,7 @@ double dpsi(u_int r, u_int s, u_int i, u_int j, arma::mat& psi,
 
     } else { // dpsi_rs / dpsi_ij
         // general case when derivative is wrt general (i, j), i > 0
-        for (k = 0; k < s; k++) {
+        for (k = r; k < s; k++) {
             s0 += xi(k, s, L) * dpsi(r, k, i, j, psi, params);
         }
         /* calculation of s1, inner summation from 1:(r-1)

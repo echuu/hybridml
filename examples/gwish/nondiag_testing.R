@@ -17,14 +17,15 @@ G = matrix(c(1,1,0,1,1,
 b = 5
 n = 10
 V = n * diag(1, p)
+V = rgwish(1, G, b, diag(p))
 
-P = chol(solve(V_5)) # upper cholesky factor; D^(-1) = TT'  in Atay paper
+P = chol(solve(V)) # upper cholesky factor; D^(-1) = TT'  in Atay paper
 
-FREE_PARAMS_ALL = c(upper.tri(diag(1, p), diag = T) & G_5)
-edgeInd = G_5[upper.tri(G_5, diag = TRUE)] %>% as.logical
+FREE_PARAMS_ALL = c(upper.tri(diag(1, p), diag = T) & G)
+edgeInd = G[upper.tri(G, diag = TRUE)] %>% as.logical
 
 ## construct A matrix so that we can compute k_i
-A = (upper.tri(diag(1, p), diag = F) & G_5) + 0
+A = (upper.tri(diag(1, p), diag = F) & G) + 0
 
 k_i  = colSums(A) # see step 2, p. 329 of Atay
 nu_i = rowSums(A) # see step 2, p. 329 of Atay
@@ -54,15 +55,53 @@ params = list(G = G, P = P, p = p, D = D, edgeInd = edgeInd,
 
 set.seed(1)
 J = 2000
-samps = samplegw(J, G_5, b, 0, V, S, solve(P), FREE_PARAMS_ALL)
+samps = samplegw(J, G, b, 0, V, S, solve(P), FREE_PARAMS_ALL)
 u_samps = samps$Psi_free %>% data.frame
 # u_df = preprocess(u_samps, D, params)     # J x (D_u + 1)
-u_df = hybridml::gwish_preprocess(u_samps, D, params) # J x (D_u + 1)
+# u_df = hybridml::gwish_preprocess(u_samps, D, params) # J x (D_u + 1)
 
 
 Rcpp::sourceCpp("C:/Users/ericc/Documents/hybridml/examples/gwish/gwish.cpp")
 
+# grad_gwish() <- dspi_ij <- dpsi         (updated version)
+# grad_cpp() <- dpsi_cpp <- dpsi_rsij     (old version)
+
+# hess_cpp() <- d2psi_ii, dpsi_rsij, d2 <- d2_rs         (old version)
+# hess_gwish() <- d2psi_ijkl <- d2psi(r, s, i, j, k, l)  (updated version)
+
 u = u_df[15,1:D] %>% unlist %>% unname
+u_mat = create_psi_mat_cpp(u, params)
+
+
+data.frame(grad_diag = grad_cpp(u, params),
+           grad_numer = pracma::grad(f = psi, u, params = params),
+           grad_general = grad_gwish(u, params),
+           t_ind - 1)
+
+library(microbenchmark)
+microbenchmark(grad_numer = pracma::grad(f = psi, u, params = params),
+               grad_general = grad_gwish(u, params),
+               times = 10)
+
+vbar - 1 # nonfree elements --> these are the ones that will have recursive calls
+## test first row gradient calculation
+rr = 0
+ss = 2
+ii = 0
+jj = 0
+
+dpsi(rr, ss, ii, jj, u_mat, params)
+dpsi_ij(1, 1, u_mat, params)
+
+## compare dpsi() output to dpsi_rsij() output
+vbar - 1
+rr = 1
+ss = 4
+ii = 1
+jj = 1
+dpsi(rr, ss, ii, jj, u_mat, params)
+dpsi_rsij(rr, ss, ii, jj, u_mat, G)
+
 data.frame(closed = grad_cpp(u, params),
            numerical = pracma::grad(f = psi, u, params = params))
 
