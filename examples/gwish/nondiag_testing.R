@@ -106,11 +106,85 @@ data.frame(closed = grad_cpp(u, params),
            numerical = pracma::grad(f = psi, u, params = params))
 
 ### testing analytical vs. numerical hessian diagonal elements
-data.frame(closed = diag(hess_cpp(u, params)),
-           numerical = diag(pracma::hessian(psi, u, params = params)),
+
+# compare individual hessian elements
+data.frame(numerical = diag(pracma::hessian(psi, u, params = params)),
            closed_test = diag(hess_cpp_test(u, params)),
-           # closed_general = diag(grad_gwish(u, params)), # this line crashes
+           closed_general = diag(hess_gwish(u, params)), # this line crashes
            t_ind)
+
+h_closed = hess_cpp_test(u, params)
+h_numer = pracma::hessian(psi, u, params = params)
+h_closed_update = hess_gwish(u, params)
+
+data.frame(
+closed = h_closed[upper.tri(h_closed)],
+numer = h_numer[upper.tri(h_numer)],
+closed_update = h_closed_update[upper.tri(h_closed_update)]
+)
+
+Rcpp::sourceCpp("C:/Users/ericc/Documents/hybridml/examples/gwish/gwish.cpp")
+
+vbar-1
+
+rr = 0
+ss = 1
+
+ii = 0   ## corresponds to the row of the hessian
+jj = 0   ## corresponds to the row of the hessian
+kk = 1   ## corresponds to the col of the hessian
+ll = 1   ## corresponds to the col of the hessian
+
+# check quantities:
+d2psi(0, 2, ii, jj, kk, ll, u_mat, params)
+d2psi(1, 3, ii, jj, kk, ll, u_mat, params)
+d2psi(1, 4, ii, jj, kk, ll, u_mat, params)
+
+
+## check these against the old quantities:
+d2_rs(0, 2, ii, jj, kk, ll, u_mat, params$G)
+d2_rs(1, 3, ii, jj, kk, ll, u_mat, params$G)
+d2_rs(1, 4, ii, jj, kk, ll, u_mat, params$G)
+
+
+## compute diagonal terms first manually
+
+d2psi_ii(rr, ss, ii, u_mat)
+d2psi(rr, ss, ii, jj, kk, ll, u_mat, params)
+
+
+h_closed = hess_cpp_test(u, params)
+h_numer = pracma::hessian(psi, u, params = params)
+h_closed_update = hess_gwish(u, params)
+
+
+# head(h_closed)[,1:5]
+head(h_numer)[,1:5]
+head(h_closed_update)[,1:5]
+
+
+all.equal(h_numer, h_closed_update)
+
+
+Rcpp::sourceCpp("C:/Users/ericc/Documents/hybridml/examples/gwish/gwish.cpp")
+d2psi(1, 4, kk, ll, ii, jj, u_mat, params)
+d2psi(1, 4, ii, jj, kk, ll, u_mat, params)
+
+d2psi(0, 2, kk, ll, ii, jj, u_mat, params)
+d2psi(1, 3, kk, ll, ii, jj, u_mat, params)
+d2psi(1, 4, kk, ll, ii, jj, u_mat, params)
+
+
+
+
+data.frame(# closed = diag(hess_cpp(u, params)),
+           numerical = diag(pracma::hessian(psi, u, params = params)),
+           closed_general = diag(hess_gwish(u, params)),
+           # closed_general = diag(grad_gwish(u, params)),
+           t_ind)
+
+
+
 
 h_closed = hess_cpp(u, params)
 h_numer = pracma::hessian(psi, u, params = params)
